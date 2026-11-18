@@ -102,6 +102,10 @@ The editable report and PDF are generated under `outputs/` when the documentatio
 - [Entity relationship diagram](docs/diagrams/entity-relationship.mmd)
 - [Database overview](docs/diagrams/database-overview.mmd)
 
+## Repository information
+
+Intended GitHub repository name: `YAAR-Youth-Activity-Assistance-Redirection`. A local Git repository and initial commit exist; no remote has been configured because GitHub CLI/authentication is unavailable and repository visibility was not specified.
+
 ## Known limitations
 
 - The browser demo store is local-only until Supabase credentials and migrations are configured.
