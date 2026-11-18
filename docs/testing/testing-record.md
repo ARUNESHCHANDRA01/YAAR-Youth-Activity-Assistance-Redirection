@@ -9,7 +9,7 @@ Date: 18 November 2026
 | TypeScript lint | Passed | `npm run lint` |
 | Recommendation smoke test | Passed | `npm run test` |
 | Production build | Passed after Supabase Vite typing fix | `npm run build` |
-| Supabase REST connectivity | Passed for profiles, organizations, opportunities and applications | Read-only anonymous-key check; no secret values printed |
+| Supabase REST connectivity | Passed for profiles, organizations, opportunities, applications and saved opportunities | Read-only anonymous-key check; no secret values printed |
 | Dependency audit | 4 high severity advisories reported by npm | `npm install` output; review before public deployment |
 
 ## Functional coverage
