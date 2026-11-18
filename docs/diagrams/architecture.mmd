@@ -1,0 +1,12 @@
+flowchart LR
+  Volunteer[Volunteer browser] --> UI[React + Vite + TypeScript]
+  Organization[Organization browser] --> UI
+  Admin[Administrator browser] --> UI
+  UI --> Router[React Router]
+  UI --> Demo[Local demo store]
+  UI --> SupabaseClient[Supabase client]
+  SupabaseClient --> Auth[Supabase Auth]
+  SupabaseClient --> DB[(PostgreSQL + RLS)]
+  UI --> Edge[Supabase Edge Function]
+  Edge --> OpenAI[OpenAI API]
+  Edge --> Fallback[Validated fallback]

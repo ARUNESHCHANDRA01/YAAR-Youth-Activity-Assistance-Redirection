@@ -1,0 +1,10 @@
+flowchart TB
+  V((Volunteer)) --> Discover[Discover and filter opportunities]
+  V --> Profile[Manage profile]
+  V --> Apply[Apply and track status]
+  V --> Save[Save opportunities]
+  O((Organization)) --> Create[Create and manage opportunities]
+  O --> Review[Review applications]
+  A((Administrator)) --> Moderation[View platform and moderation overview]
+  Discover --> Match[Recommendation engine]
+  Match --> Apply

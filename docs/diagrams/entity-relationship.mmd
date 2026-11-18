@@ -1,0 +1,12 @@
+erDiagram
+  PROFILES ||--o| ORGANIZATIONS : owns
+  ORGANIZATIONS ||--o{ OPPORTUNITIES : publishes
+  PROFILES ||--o{ APPLICATIONS : submits
+  OPPORTUNITIES ||--o{ APPLICATIONS : receives
+  PROFILES ||--o{ SAVED_OPPORTUNITIES : saves
+  OPPORTUNITIES ||--o{ SAVED_OPPORTUNITIES : is_saved
+  PROFILES { uuid id PK; text name; user_role role; text[] interests; text[] skills }
+  ORGANIZATIONS { uuid id PK; uuid owner_id FK; text name; boolean verified }
+  OPPORTUNITIES { uuid id PK; uuid organization_id FK; text title; opportunity_status status; date activity_date }
+  APPLICATIONS { uuid id PK; uuid opportunity_id FK; uuid volunteer_id FK; application_status status }
+  SAVED_OPPORTUNITIES { uuid volunteer_id PK; uuid opportunity_id PK }

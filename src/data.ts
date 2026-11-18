@@ -1,0 +1,44 @@
+import type { Application, Opportunity, Profile, Store } from './types'
+
+export const categories = ['Environment', 'Education', 'Health', 'Community', 'Technology', 'Animal welfare']
+
+export const demoProfiles: Profile[] = [
+  {
+    id: 'volunteer-arunesh', name: 'Arunesh Chandra', email: 'arunesh@example.com', role: 'volunteer',
+    bio: 'Computer science student who enjoys making small, useful changes in the community.', location: 'Greater Noida',
+    interests: ['Education', 'Technology', 'Environment'], skills: ['Web development', 'Teaching', 'Communication'],
+    availability: 'Weekends', experience: 'Intermediate', completion: 86,
+  },
+  {
+    id: 'org-greensteps', name: 'GreenSteps Foundation', email: 'hello@greensteps.org', role: 'organization',
+    bio: 'Local community organization creating hands-on environmental action.', location: 'Greater Noida',
+    interests: ['Environment', 'Community'], skills: ['Project management'], availability: 'Flexible', experience: 'Expert', completion: 92,
+  },
+  {
+    id: 'admin-yaar', name: 'Y.A.A.R. Administrator', email: 'admin@yaar.local', role: 'administrator',
+    bio: 'Platform administrator.', location: 'India', interests: [], skills: [], availability: 'Flexible', experience: 'Expert', completion: 100,
+  },
+]
+
+export const demoOpportunities: Opportunity[] = [
+  { id: 'opp-1', title: 'Yamuna Clean-up Drive', organization: 'GreenSteps Foundation', organizationId: 'org-greensteps', description: 'Join a friendly weekend clean-up and help restore a local stretch of the Yamuna. Gloves, safety briefing and refreshments are provided.', category: 'Environment', location: 'Greater Noida', date: '2026-12-06', timeCommitment: '4 hours', deadline: '2026-12-03', skills: ['Teamwork', 'Physical activity'], capacity: 24, applicants: 16, status: 'published', featured: true, accent: 'mint' },
+  { id: 'opp-2', title: 'Code for Classrooms', organization: 'Udaan Learning Centre', organizationId: 'org-udaan', description: 'Teach middle-school learners the basics of web design through playful, project-based sessions.', category: 'Education', location: 'Noida', date: '2026-12-12', timeCommitment: '3 hours / week', deadline: '2026-12-08', skills: ['Web development', 'Teaching'], capacity: 10, applicants: 7, status: 'published', featured: true, accent: 'yellow' },
+  { id: 'opp-3', title: 'Digital Help Desk', organization: 'Saksham Senior Care', organizationId: 'org-saksham', description: 'Support older adults with everyday digital tasks like UPI, telemedicine and online safety.', category: 'Technology', location: 'Ghaziabad', date: '2026-12-19', timeCommitment: '2 hours', deadline: '2026-12-15', skills: ['Communication', 'Digital literacy'], capacity: 12, applicants: 4, status: 'published', accent: 'blue' },
+  { id: 'opp-4', title: 'Community Health Camp', organization: 'Sehat Saathi', organizationId: 'org-sehat', description: 'Help with registration, wayfinding and outreach at a free health screening camp for local families.', category: 'Health', location: 'Greater Noida', date: '2026-12-27', timeCommitment: '5 hours', deadline: '2026-12-22', skills: ['Communication', 'Organization'], capacity: 18, applicants: 11, status: 'published', accent: 'coral' },
+  { id: 'opp-5', title: 'Street Animal Care Day', organization: 'Paws & Care', organizationId: 'org-paws', description: 'Assist with feeding, basic care and adoption awareness for rescued street animals.', category: 'Animal welfare', location: 'Delhi NCR', date: '2027-01-03', timeCommitment: '4 hours', deadline: '2026-12-29', skills: ['Animal care'], capacity: 15, applicants: 9, status: 'published', accent: 'purple' },
+  { id: 'opp-6', title: 'Neighbourhood Library Setup', organization: 'ReadForward', organizationId: 'org-readforward', description: 'Sort donated books and help a resident-led library create a welcoming reading corner.', category: 'Community', location: 'Noida', date: '2026-12-13', timeCommitment: '3 hours', deadline: '2026-12-10', skills: ['Organization'], capacity: 14, applicants: 5, status: 'published', accent: 'orange' },
+]
+
+export const demoApplications: Application[] = [
+  { id: 'app-1', opportunityId: 'opp-2', volunteerId: 'volunteer-arunesh', createdAt: '2026-11-11', status: 'accepted' },
+  { id: 'app-2', opportunityId: 'opp-4', volunteerId: 'volunteer-arunesh', createdAt: '2026-11-14', status: 'pending' },
+]
+
+export const initialStore: Store = { profiles: demoProfiles, opportunities: demoOpportunities, applications: demoApplications, saved: ['opp-1', 'opp-5'] }
+
+export function loadStore(): Store {
+  try {
+    const stored = localStorage.getItem('yaar-demo-store')
+    return stored ? JSON.parse(stored) as Store : initialStore
+  } catch { return initialStore }
+}

@@ -1,0 +1,8 @@
+flowchart LR
+  ProfileInput[Profile interests, skills, location, availability] --> Filter[Basic published opportunity filtering]
+  Filter --> Score[Deterministic scoring]
+  Score --> OptionalAI[Optional secure AI request]
+  OptionalAI --> Validate[Validate structured response]
+  Validate --> Results[Recommendations with explanations]
+  OptionalAI -->|missing key or invalid response| Fallback[Rule-based fallback]
+  Fallback --> Results

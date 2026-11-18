@@ -1,0 +1,12 @@
+flowchart TD
+  Profiles[(profiles)] --> Organizations[(organizations)]
+  Organizations --> Opportunities[(opportunities)]
+  Profiles --> Applications[(applications)]
+  Opportunities --> Applications
+  Profiles --> Saved[(saved_opportunities)]
+  Opportunities --> Saved
+  RLS[Row Level Security policies] -. protects .-> Profiles
+  RLS -. protects .-> Organizations
+  RLS -. protects .-> Opportunities
+  RLS -. protects .-> Applications
+  RLS -. protects .-> Saved
