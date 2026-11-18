@@ -33,7 +33,7 @@ npm install
 npm run dev
 ```
 
-Open the URL printed by Vite. The landing page links to a demo sign-in screen. Choose a volunteer, organization or administrator account. The demo data is stored in `localStorage`; no credentials are required for the academic preview.
+Open the URL printed by Vite. With Supabase configured, the app loads live sessions and database records. The prepared demo roles remain available as a local fallback so the academic preview can still be explored without creating accounts.
 
 Production verification:
 
@@ -64,7 +64,7 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 5. Deploy `supabase/functions/recommend-opportunities/index.ts` if OpenAI recommendations are required.
 6. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
 
-The frontend continues to work with rule-based recommendations when Supabase or OpenAI is not configured. The current demo store is intentionally separate from production persistence so a reviewer can explore the application without credentials.
+The frontend continues to work with rule-based recommendations when Supabase or OpenAI is not configured. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
 
 ## Roles
 
@@ -76,7 +76,7 @@ The frontend continues to work with rule-based recommendations when Supabase or 
 
 ## Architecture
 
-The current client uses React Router and a small application context for predictable demo state. The Supabase boundary is isolated in `src/lib/supabase.ts`; the normalized database and RLS model live in `supabase/migrations/`. Recommendation scoring is implemented in `src/lib/recommendations.ts`, while the optional secret-bearing integration is an Edge Function.
+The current client uses React Router and a small application context for predictable local state and live Supabase refreshes. The Supabase client boundary is isolated in `src/lib/supabase.ts`; live row mapping and mutations are in `src/lib/supabaseData.ts`; the normalized database and RLS model live in `supabase/migrations/`. Recommendation scoring is implemented in `src/lib/recommendations.ts`, while the optional secret-bearing integration is an Edge Function.
 
 See the reproducible Mermaid sources in `docs/diagrams/` for the architecture, use cases, data flow and entity relationships.
 
@@ -108,8 +108,8 @@ Intended GitHub repository name: `YAAR-Youth-Activity-Assistance-Redirection`. A
 
 ## Known limitations
 
-- The browser demo store is local-only until Supabase credentials and migrations are configured.
-- Password reset and production email verification are delegated to Supabase Auth configuration and are not exercised in demo mode.
+- The browser demo store remains available as a fallback; live tables must contain organization/opportunity records before the live directory has content.
+- Password reset and production email verification are delegated to Supabase Auth configuration and require a live Auth test.
 - AI recommendations are optional; deterministic scoring is the guaranteed fallback.
 - GitHub publication and deployment are not claimed unless credentials and a remote are available and verified.
 

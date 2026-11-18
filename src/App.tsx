@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowRight, Award, BarChart3, Bell, BookOpen, BriefcaseBusiness, CalendarDays, Check, ChevronRight,
@@ -6,7 +7,8 @@ import {
   Settings, ShieldCheck, Sparkles, Target, TrendingUp, UserRound, Users, X, Zap,
 } from 'lucide-react'
 import { categories, initialStore, loadStore } from './data'
-import { isSupabaseConfigured } from './lib/supabase'
+import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { createLiveApplication, createLiveOpportunity, loadLiveStore, profileForSession, saveLiveOpportunity, updateLiveApplication, updateLiveProfile } from './lib/supabaseData'
 import { recommend, type Recommendation } from './lib/recommendations'
 import type { ApplicationStatus, Opportunity, Profile, Role, Store } from './types'
 
@@ -16,13 +18,13 @@ type AppContextValue = {
   login: (profile: Profile) => void
   logout: () => void
   showToast: (message: string, tone?: 'success' | 'error') => void
-  apply: (opportunityId: string) => void
-  withdraw: (applicationId: string) => void
-  save: (opportunityId: string) => void
-  updateProfile: (data: Partial<Profile>) => void
+  apply: (opportunityId: string) => Promise<void>
+  withdraw: (applicationId: string) => Promise<void>
+  save: (opportunityId: string) => Promise<void>
+  updateProfile: (data: Partial<Profile>) => Promise<void>
   addProfile: (profile: Profile) => void
-  addOpportunity: (opportunity: Opportunity) => void
-  updateApplication: (applicationId: string, status: ApplicationStatus) => void
+  addOpportunity: (opportunity: Opportunity) => Promise<void>
+  updateApplication: (applicationId: string, status: ApplicationStatus) => Promise<void>
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -31,34 +33,92 @@ const useApp = () => useContext(AppContext)!
 function App() {
   const [store, setStore] = useState<Store>(() => loadStore())
   const [user, setUser] = useState<Profile | null>(() => {
+    if (isSupabaseConfigured) return null
     const id = localStorage.getItem('yaar-demo-session')
     return id ? loadStore().profiles.find((profile) => profile.id === id) ?? null : null
   })
+  const [liveSession, setLiveSession] = useState(false)
+  const [isLoading, setIsLoading] = useState(isSupabaseConfigured)
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
 
-  useEffect(() => { localStorage.setItem('yaar-demo-store', JSON.stringify(store)) }, [store])
-  useEffect(() => { user ? localStorage.setItem('yaar-demo-session', user.id) : localStorage.removeItem('yaar-demo-session') }, [user])
+  useEffect(() => { if (!isSupabaseConfigured || !liveSession) localStorage.setItem('yaar-demo-store', JSON.stringify(store)) }, [store, liveSession])
+  useEffect(() => { if (!isSupabaseConfigured || !liveSession) user ? localStorage.setItem('yaar-demo-session', user.id) : localStorage.removeItem('yaar-demo-session') }, [user, liveSession])
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 3500); return () => window.clearTimeout(timer) }, [toast])
+
+  useEffect(() => {
+    if (!supabase) { setIsLoading(false); return }
+    let cancelled = false
+    const hydrate = async (session: Session | null) => {
+      if (!session) {
+        setLiveSession(false); setUser(null)
+        try { const publicStore = await loadLiveStore(null); if (!cancelled) setStore(publicStore) } catch { /* public browsing can fall back to demo data */ }
+        if (!cancelled) setIsLoading(false)
+        return
+      }
+      try {
+        const profile = await profileForSession(session)
+        const nextStore = await loadLiveStore(profile)
+        if (!cancelled) { setLiveSession(true); setUser(profile); setStore(nextStore); setIsLoading(false) }
+      } catch (error) {
+        if (!cancelled) { setLiveSession(false); setUser(null); setIsLoading(false); setToast({ message: friendlyError(error), tone: 'error' }) }
+      }
+    }
+    void supabase.auth.getSession().then(({ data }) => hydrate(data.session))
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { window.setTimeout(() => { void hydrate(session) }, 0) })
+    return () => { cancelled = true; listener.subscription.unsubscribe() }
+  }, [])
+
+  const refreshLive = async (activeUser = user) => {
+    if (!isSupabaseConfigured || !liveSession || !activeUser) return
+    const nextStore = await loadLiveStore(activeUser)
+    setStore(nextStore)
+  }
 
   const value: AppContextValue = {
     user, store,
-    login: (profile) => setUser(profile), logout: () => setUser(null),
+    login: (profile) => { setLiveSession(false); setStore(initialStore); setUser(profile) },
+    logout: () => { if (supabase && liveSession) void supabase.auth.signOut(); setLiveSession(false); setUser(null) },
     showToast: (message, tone = 'success') => setToast({ message, tone }),
-    apply: (opportunityId) => setStore((current) => {
-      if (!user) return current
-      const opportunity = current.opportunities.find((item) => item.id === opportunityId)
-      const exists = current.applications.some((item) => item.opportunityId === opportunityId && item.volunteerId === user.id && item.status !== 'withdrawn')
-      if (!opportunity || opportunity.status !== 'published' || exists) return current
-      setToast({ message: 'Application sent. The organization will review it soon.', tone: 'success' })
-      return { ...current, applications: [...current.applications, { id: `app-${Date.now()}`, opportunityId, volunteerId: user.id, createdAt: new Date().toISOString().slice(0, 10), status: 'pending' }], opportunities: current.opportunities.map((item) => item.id === opportunityId ? { ...item, applicants: item.applicants + 1 } : item) }
-    }),
-    withdraw: (applicationId) => setStore((current) => ({ ...current, applications: current.applications.map((item) => item.id === applicationId ? { ...item, status: 'withdrawn' } : item) })),
-    save: (opportunityId) => setStore((current) => ({ ...current, saved: current.saved.includes(opportunityId) ? current.saved.filter((id) => id !== opportunityId) : [...current.saved, opportunityId] })),
-    updateProfile: (data) => { if (!user) return; const next = { ...user, ...data }; setStore((current) => ({ ...current, profiles: current.profiles.map((item) => item.id === user.id ? next : item) })); setUser(next); setToast({ message: 'Profile updated successfully.', tone: 'success' }) },
-    addProfile: (profile) => { setStore((current) => ({ ...current, profiles: [...current.profiles, profile] })); setUser(profile) },
-    addOpportunity: (opportunity) => { setStore((current) => ({ ...current, opportunities: [opportunity, ...current.opportunities] })); setToast({ message: 'Opportunity saved as a draft.', tone: 'success' }) },
-    updateApplication: (applicationId, status) => setStore((current) => ({ ...current, applications: current.applications.map((item) => item.id === applicationId ? { ...item, status } : item) })),
+    apply: async (opportunityId) => {
+      if (!user) return
+      if (isSupabaseConfigured && liveSession) {
+        try { await createLiveApplication(opportunityId, user.id); await refreshLive(); setToast({ message: 'Application sent. The organization will review it soon.', tone: 'success' }) } catch (error) { setToast({ message: friendlyError(error), tone: 'error' }) }
+        return
+      }
+      setStore((current) => {
+        const opportunity = current.opportunities.find((item) => item.id === opportunityId)
+        const exists = current.applications.some((item) => item.opportunityId === opportunityId && item.volunteerId === user.id && item.status !== 'withdrawn')
+        if (!opportunity || opportunity.status !== 'published' || exists) return current
+        setToast({ message: 'Application sent. The organization will review it soon.', tone: 'success' })
+        return { ...current, applications: [...current.applications, { id: `app-${Date.now()}`, opportunityId, volunteerId: user.id, createdAt: new Date().toISOString().slice(0, 10), status: 'pending' }], opportunities: current.opportunities.map((item) => item.id === opportunityId ? { ...item, applicants: item.applicants + 1 } : item) }
+      })
+    },
+    withdraw: async (applicationId) => {
+      if (isSupabaseConfigured && liveSession) { try { await updateLiveApplication(applicationId, 'withdrawn'); await refreshLive() } catch (error) { setToast({ message: friendlyError(error), tone: 'error' }) }; return }
+      setStore((current) => ({ ...current, applications: current.applications.map((item) => item.id === applicationId ? { ...item, status: 'withdrawn' } : item) }))
+    },
+    save: async (opportunityId) => {
+      if (!user) return
+      if (isSupabaseConfigured && liveSession) { try { await saveLiveOpportunity(opportunityId, user.id, store.saved.includes(opportunityId)); await refreshLive() } catch (error) { setToast({ message: friendlyError(error), tone: 'error' }) }; return }
+      setStore((current) => ({ ...current, saved: current.saved.includes(opportunityId) ? current.saved.filter((id) => id !== opportunityId) : [...current.saved, opportunityId] }))
+    },
+    updateProfile: async (data) => {
+      if (!user) return
+      if (isSupabaseConfigured && liveSession) { try { const next = await updateLiveProfile(user.id, data); setUser(next); await refreshLive(next); setToast({ message: 'Profile updated successfully.', tone: 'success' }) } catch (error) { setToast({ message: friendlyError(error), tone: 'error' }) }; return }
+      const next = { ...user, ...data }; setStore((current) => ({ ...current, profiles: current.profiles.map((item) => item.id === user.id ? next : item) })); setUser(next); setToast({ message: 'Profile updated successfully.', tone: 'success' })
+    },
+    addProfile: (profile) => { setLiveSession(false); setStore((current) => ({ ...current, profiles: [...current.profiles, profile] })); setUser(profile) },
+    addOpportunity: async (opportunity) => {
+      if (user && isSupabaseConfigured && liveSession) { try { await createLiveOpportunity(opportunity, user.id); await refreshLive(); setToast({ message: 'Opportunity saved as a draft.', tone: 'success' }) } catch (error) { setToast({ message: friendlyError(error), tone: 'error' }) }; return }
+      setStore((current) => ({ ...current, opportunities: [opportunity, ...current.opportunities] })); setToast({ message: 'Opportunity saved as a draft.', tone: 'success' })
+    },
+    updateApplication: async (applicationId, status) => {
+      if (isSupabaseConfigured && liveSession) { try { await updateLiveApplication(applicationId, status); await refreshLive(); setToast({ message: `Application ${status}.`, tone: 'success' }) } catch (error) { setToast({ message: friendlyError(error), tone: 'error' }) }; return }
+      setStore((current) => ({ ...current, applications: current.applications.map((item) => item.id === applicationId ? { ...item, status } : item) }))
+    },
   }
+
+  if (isLoading) return <div className="app-loading"><span className="brand-mark">Y</span><strong>Loading Y.A.A.R.</strong><small>Checking your session and opportunities...</small></div>
 
   return <AppContext.Provider value={value}>
     <Routes>
@@ -100,10 +160,48 @@ function Landing() {
 function Step({ number, icon, title, text }: { number: string; icon: ReactNode; title: string; text: string }) { return <div className="step"><div className="step-top"><span>{number}</span><span className="step-icon">{icon}</span></div><h3>{title}</h3><p>{text}</p></div> }
 
 function AuthScreen() {
-  const { store, login, addProfile } = useApp(); const [mode, setMode] = useState<'login' | 'register'>('login'); const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [error, setError] = useState('')
+  const { login, addProfile } = useApp()
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const live = Boolean(isSupabaseConfigured && supabase)
   const demo = (profile: Profile) => login(profile)
-  const submit = (event: FormEvent) => { event.preventDefault(); if (!name.trim() || !email.includes('@')) { setError('Enter your name and a valid email address.'); return }; const profile: Profile = { id: `volunteer-${Date.now()}`, name, email, role: 'volunteer', bio: '', location: 'Greater Noida', interests: ['Community'], skills: [], availability: 'Weekends', experience: 'Beginner', completion: 38 }; addProfile(profile) }
-  return <div className="auth-page"><Link to="/" className="brand auth-brand"><span className="brand-mark">Y</span><span>Y.A.A.R.</span></Link><div className="auth-layout"><div className="auth-intro"><div className="eyebrow">WELCOME TO Y.A.A.R.</div><h1>Your next good thing is closer than you think.</h1><p>Sign in to discover opportunities, track your applications and keep growing with purpose.</p><div className="auth-note"><ShieldCheck size={18} /><span><strong>Demo mode is ready.</strong><small>No credentials required for this academic preview.</small></span></div></div><div className="auth-card"><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Sign in</button><button className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Create profile</button></div>{mode === 'login' ? <><div className="form-heading"><h2>Choose a demo role</h2><p>Use one of the prepared accounts to explore each experience.</p></div><div className="demo-accounts">{store.profiles.slice(0, 3).map((profile) => <button key={profile.id} className="demo-account" onClick={() => demo(profile)}><span className={`role-avatar ${profile.role}`}>{profile.name.slice(0, 1)}</span><span><strong>{profile.name}</strong><small>{profile.role === 'organization' ? 'Organization workspace' : profile.role === 'administrator' ? 'Platform overview' : 'Volunteer workspace'}</small></span><ArrowRight size={17} /></button>)}</div><div className="form-divider"><span>Preview is local-first</span></div><p className="fine-print">Connect Supabase using <code>.env</code> to enable real authentication and persistence.</p></> : <form onSubmit={submit}><div className="form-heading"><h2>Start with a simple profile</h2><p>You can update your interests and skills after signing in.</p></div><label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" /></label><label>Email address<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" /></label>{error && <p className="form-error">{error}</p>}<button className="button button-primary full" type="submit">Create volunteer profile <ArrowRight size={16} /></button></form>}</div></div><p className="auth-footer">Y.A.A.R. • Youth Activity, Assistance & Redirection</p></div>
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setError(''); setMessage('')
+    if (!email.includes('@') || password.length < 6) { setError('Enter a valid email and a password with at least 6 characters.'); return }
+    if (live && supabase) {
+      if (mode === 'register') {
+        if (!name.trim()) { setError('Enter your name to create a profile.'); return }
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim() } } })
+        if (signUpError) { setError(friendlyError(signUpError)); return }
+        if (data.session) setMessage('Account created. Loading your Y.A.A.R. profile...')
+        else setMessage('Account created. Check your email to confirm your account, then sign in.')
+      } else {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+        if (signInError) setError(friendlyError(signInError))
+      }
+      return
+    }
+    if (mode === 'register') {
+      if (!name.trim()) { setError('Enter your name and a valid email address.'); return }
+      const profile: Profile = { id: `volunteer-${Date.now()}`, name, email, role: 'volunteer', bio: '', location: 'Greater Noida', interests: ['Community'], skills: [], availability: 'Weekends', experience: 'Beginner', completion: 38 }
+      addProfile(profile)
+    }
+  }
+
+  const resetPassword = async () => {
+    setError(''); setMessage('')
+    if (!live || !supabase) { setError('Password reset requires Supabase authentication.'); return }
+    if (!email.includes('@')) { setError('Enter your email address first.'); return }
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/login` })
+    if (resetError) setError(friendlyError(resetError)); else setMessage('Password reset instructions have been sent if the account exists.')
+  }
+
+  return <div className="auth-page"><Link to="/" className="brand auth-brand"><span className="brand-mark">Y</span><span>Y.A.A.R.</span></Link><div className="auth-layout"><div className="auth-intro"><div className="eyebrow">WELCOME TO Y.A.A.R.</div><h1>Your next good thing is closer than you think.</h1><p>Sign in to discover opportunities, track your applications and keep growing with purpose.</p><div className="auth-note"><ShieldCheck size={18} /><span><strong>{live ? 'Supabase authentication is connected.' : 'Demo mode is ready.'}</strong><small>{live ? 'Use your email and password to continue.' : 'No credentials required for this academic preview.'}</small></span></div></div><div className="auth-card"><div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); setMessage('') }}>Sign in</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); setMessage('') }}>Create profile</button></div><form onSubmit={submit}><div className="form-heading"><h2>{mode === 'login' ? 'Welcome back' : 'Create your profile'}</h2><p>{mode === 'login' ? 'Use your Supabase account or explore the prepared demo roles.' : 'Create a volunteer account with Supabase.'}</p></div>{mode === 'register' && <label>Full name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" /></label>}<label>Email address<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" /></label><label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" type="password" /></label>{error && <p className="form-error">{error}</p>}{message && <p className="form-success">{message}</p>}<button className="button button-primary full" type="submit">{mode === 'login' ? 'Sign in securely' : 'Create volunteer account'} <ArrowRight size={16} /></button>{mode === 'login' && <button type="button" className="text-link auth-reset" onClick={() => void resetPassword()}>Forgot password?</button>}</form><div className="form-divider"><span>Or use a demo role</span></div><div className="demo-accounts">{initialStore.profiles.slice(0, 3).map((profile) => <button key={profile.id} className="demo-account" onClick={() => demo(profile)}><span className={`role-avatar ${profile.role}`}>{profile.name.slice(0, 1)}</span><span><strong>{profile.name}</strong><small>{profile.role === 'organization' ? 'Organization workspace' : profile.role === 'administrator' ? 'Platform overview' : 'Volunteer workspace'}</small></span><ArrowRight size={17} /></button>)}</div></div></div><p className="auth-footer">Y.A.A.R. • Youth Activity, Assistance & Redirection</p></div>
 }
 
 function AppShell() {
@@ -144,5 +242,12 @@ function AdminPage() { const { store } = useApp(); const published = store.oppor
 function Activity({ icon, title, detail, metric, tone }: { icon: ReactNode; title: string; detail: string; metric: string; tone: string }) { return <div className="activity-row"><span className={`activity-icon ${tone}`}>{icon}</span><div><strong>{title}</strong><small>{detail}</small></div><b>{metric}</b></div> }
 function EmptyState({ title, text, onClear }: { title: string; text: string; onClear: () => void }) { return <div className="empty-state"><span className="empty-icon"><Search size={23} /></span><h2>{title}</h2><p>{text}</p><button className="button button-light" onClick={onClear}>Clear filters</button></div> }
 function formatDate(date: string) { return new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) }
+function friendlyError(error: unknown) {
+  const message = error && typeof error === 'object' && 'message' in error ? String((error as { message?: unknown }).message ?? '') : ''
+  if (message.toLowerCase().includes('duplicate') || message.toLowerCase().includes('unique')) return 'You already have an active application for this opportunity.'
+  if (message.toLowerCase().includes('invalid login')) return 'The email or password is incorrect.'
+  if (message.toLowerCase().includes('row-level security')) return 'You do not have permission to perform that action.'
+  return message || 'Something went wrong. Please try again.'
+}
 
 export default App
