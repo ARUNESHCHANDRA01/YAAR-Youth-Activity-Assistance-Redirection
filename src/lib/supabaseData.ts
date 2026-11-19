@@ -78,6 +78,11 @@ export async function loadLiveStore(profile: Profile | null): Promise<Store> {
     const { data: applicationRows, error: applicationError } = await client.from('applications').select('id, opportunity_id, volunteer_id, created_at, status')
     if (applicationError) throw applicationError
     for (const row of (applicationRows ?? []) as Array<Record<string, unknown>>) applications.push({ id: String(row.id), opportunityId: String(row.opportunity_id), volunteerId: String(row.volunteer_id), createdAt: String(row.created_at).slice(0, 10), status: row.status as ApplicationStatus })
+    const applicantIds = [...new Set(applications.map((application) => application.volunteerId).filter((id) => id !== profile.id))]
+    if (applicantIds.length && (profile.role === 'organization' || profile.role === 'administrator')) {
+      const { data: applicantRows } = await client.from('profiles').select('*').in('id', applicantIds)
+      for (const row of (applicantRows ?? []) as Array<Record<string, unknown>>) profiles.push(profileFromRow(row))
+    }
     const counts = new Map<string, number>()
     for (const application of applications) if (application.status !== 'withdrawn') counts.set(application.opportunityId, (counts.get(application.opportunityId) ?? 0) + 1)
     for (const opportunity of opportunities) opportunity.applicants = counts.get(opportunity.id) ?? 0
