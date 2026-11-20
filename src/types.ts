@@ -1,5 +1,6 @@
 export type Role = 'volunteer' | 'organization' | 'administrator'
 export type OpportunityStatus = 'published' | 'draft' | 'closed'
+export type OpportunityReviewStatus = 'pending' | 'approved' | 'rejected'
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'completed'
 
 export type Profile = {
@@ -31,6 +32,8 @@ export type Opportunity = {
   capacity: number
   applicants: number
   status: OpportunityStatus
+  reviewStatus?: OpportunityReviewStatus
+  createdBy?: string
   featured?: boolean
   accent: string
 }

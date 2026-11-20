@@ -1,10 +1,10 @@
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { ApplicationStatus, Opportunity, Profile, Store } from '../types'
+import type { ApplicationStatus, Opportunity, OpportunityReviewStatus, Profile, Store } from '../types'
 
 type OpportunityRow = {
   id: string
-  organization_id: string
+  organization_id: string | null
   title: string
   description: string
   category: string
@@ -15,6 +15,8 @@ type OpportunityRow = {
   required_skills: string[] | null
   volunteer_capacity: number
   status: Opportunity['status']
+  review_status?: OpportunityReviewStatus
+  created_by?: string | null
   organizations?: { name?: string; owner_id?: string } | { name?: string; owner_id?: string }[] | null
 }
 
@@ -54,7 +56,7 @@ export async function profileForSession(session: Session): Promise<Profile> {
 
 function opportunityFromRow(row: OpportunityRow): Opportunity {
   const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
-  return { id: row.id, title: row.title, organization: organization?.name ?? 'Community organization', organizationId: organization?.owner_id ?? row.organization_id, description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, accent: accentForCategory(row.category) }
+  return { id: row.id, title: row.title, organization: organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, accent: accentForCategory(row.category) }
 }
 
 function accentForCategory(category: string) {
@@ -82,6 +84,13 @@ export async function loadLiveStore(profile: Profile | null): Promise<Store> {
     if (applicantIds.length && (profile.role === 'organization' || profile.role === 'administrator')) {
       const { data: applicantRows } = await client.from('profiles').select('*').in('id', applicantIds)
       for (const row of (applicantRows ?? []) as Array<Record<string, unknown>>) profiles.push(profileFromRow(row))
+    }
+    const creatorIds = [...new Set(opportunities.map((opportunity) => opportunity.createdBy).filter((id): id is string => Boolean(id)))]
+    if (creatorIds.length && profile.role === 'administrator') {
+      const { data: creatorRows } = await client.from('profiles').select('*').in('id', creatorIds)
+      for (const row of (creatorRows ?? []) as Array<Record<string, unknown>>) profiles.push(profileFromRow(row))
+      const creatorNames = new Map(profiles.map((item) => [item.id, item.name]))
+      for (const opportunity of opportunities) if (!opportunity.organizationId && opportunity.createdBy) opportunity.organization = creatorNames.get(opportunity.createdBy) ?? 'Volunteer proposal'
     }
     const counts = new Map<string, number>()
     for (const application of applications) if (application.status !== 'withdrawn') counts.set(application.opportunityId, (counts.get(application.opportunityId) ?? 0) + 1)
@@ -126,10 +135,20 @@ export async function saveLiveOpportunity(opportunityId: string, volunteerId: st
   }
 }
 
-export async function createLiveOpportunity(opportunity: Opportunity, ownerId: string) {
+export async function createLiveOpportunity(opportunity: Opportunity, ownerId: string, ownerRole: Profile['role']) {
   const client = requireClient()
-  const { data: organization, error: organizationError } = await client.from('organizations').select('id').eq('owner_id', ownerId).single()
-  if (organizationError) throw organizationError
-  const { error } = await client.from('opportunities').insert({ organization_id: organization.id, title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, volunteer_capacity: opportunity.capacity, status: opportunity.status })
+  let organizationId: string | null = null
+  if (ownerRole === 'organization') {
+    const { data: organization, error: organizationError } = await client.from('organizations').select('id').eq('owner_id', ownerId).single()
+    if (organizationError) throw organizationError
+    organizationId = organization.id
+  }
+  const { error } = await client.from('opportunities').insert({ organization_id: organizationId, created_by: ownerId, title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : 'approved' })
+  if (error) throw error
+}
+
+export async function reviewLiveOpportunity(opportunityId: string, reviewStatus: OpportunityReviewStatus) {
+  const client = requireClient()
+  const { error } = await client.from('opportunities').update({ review_status: reviewStatus, status: reviewStatus === 'approved' ? 'published' : 'draft' }).eq('id', opportunityId)
   if (error) throw error
 }
