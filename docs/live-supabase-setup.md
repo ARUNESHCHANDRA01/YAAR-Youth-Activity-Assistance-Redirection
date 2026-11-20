@@ -2,6 +2,16 @@
 
 The React client now uses Supabase Auth and PostgreSQL when a live session exists. The prepared demo roles remain available as a fallback. To test organization and administrator workflows, provision test accounts in the Supabase dashboard.
 
+## Enable Google sign-in
+
+1. In Supabase, open **Authentication → Providers → Google** and enable the provider.
+2. Create or select a Google OAuth web client in Google Cloud Console.
+3. Add `https://<project-ref>.supabase.co/auth/v1/callback` as the Google OAuth authorized redirect URI.
+4. Copy the Google client ID and client secret into the Supabase Google provider settings.
+5. In Supabase **Authentication → URL Configuration**, allow `http://localhost:5173/login` and the deployed application's `/login` URL.
+
+The login page calls `supabase.auth.signInWithOAuth({ provider: 'google' })`. Google profile metadata is used to create a volunteer profile automatically when the user signs in for the first time.
+
 ## Apply the follow-up security migration
 
 Run `supabase/migrations/20261119000100_role_protection_and_applicant_visibility.sql` in the Supabase SQL Editor after the initial migration. This prevents ordinary users from changing their own role and lets an organization view the profiles attached to its own applications.

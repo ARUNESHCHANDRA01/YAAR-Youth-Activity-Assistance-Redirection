@@ -58,11 +58,13 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 ## Supabase setup
 
 1. Create a Supabase project and enable email/password authentication.
-2. Add the project URL and anonymous key to `.env`.
-3. Apply `supabase/migrations/20261118000100_initial_yaar.sql` with the Supabase CLI or SQL editor.
-4. Configure authentication redirect URLs for the local and deployed origins.
-5. Deploy `supabase/functions/recommend-opportunities/index.ts` if OpenAI recommendations are required.
-6. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
+2. Enable the Google provider under **Authentication → Providers → Google** and enter the Google OAuth client ID and secret.
+3. In Google Cloud Console, add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized redirect URI.
+4. Add the project URL and anonymous key to `.env`.
+5. Apply `supabase/migrations/20261118000100_initial_yaar.sql` with the Supabase CLI or SQL editor.
+6. Configure authentication redirect URLs for `http://localhost:5173/login` and the deployed `/login` route.
+7. Deploy `supabase/functions/recommend-opportunities/index.ts` if OpenAI recommendations are required.
+8. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
 
 The frontend continues to work with rule-based recommendations when Supabase or OpenAI is not configured. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
 
