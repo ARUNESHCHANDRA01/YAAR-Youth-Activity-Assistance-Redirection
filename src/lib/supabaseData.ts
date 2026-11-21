@@ -17,6 +17,8 @@ type OpportunityRow = {
   status: Opportunity['status']
   review_status?: OpportunityReviewStatus
   created_by?: string | null
+  partner_name?: string | null
+  featured?: boolean | null
   organizations?: { name?: string; owner_id?: string } | { name?: string; owner_id?: string }[] | null
 }
 
@@ -56,7 +58,7 @@ export async function profileForSession(session: Session): Promise<Profile> {
 
 function opportunityFromRow(row: OpportunityRow): Opportunity {
   const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
-  return { id: row.id, title: row.title, organization: organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, accent: accentForCategory(row.category) }
+  return { id: row.id, title: row.title, organization: row.partner_name ?? organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, featured: Boolean(row.featured), accent: accentForCategory(row.category) }
 }
 
 function accentForCategory(category: string) {
