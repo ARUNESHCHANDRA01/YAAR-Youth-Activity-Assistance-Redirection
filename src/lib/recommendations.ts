@@ -2,7 +2,7 @@ import type { Opportunity, Profile } from '../types'
 import { supabase } from './supabase'
 
 export type Recommendation = Opportunity & { score: number; reason: string }
-export type RecommendationSource = 'openai' | 'fallback' | 'loading'
+export type RecommendationSource = 'openai' | 'fallback' | 'empty' | 'loading'
 export type RecommendationResult = { recommendations: Recommendation[]; source: Exclude<RecommendationSource, 'loading'> }
 
 export function recommend(profile: Profile, opportunities: Opportunity[]): Recommendation[] {
@@ -49,7 +49,7 @@ export async function recommendWithAI(profile: Profile, opportunities: Opportuni
     .filter((item) => item.status === 'published')
     .slice(0, 40)
     .map((item) => ({ id: item.id, title: item.title, category: item.category, location: item.location, skills: item.skills, date: item.date }))
-  if (!candidates.length) return { recommendations: fallback, source: 'fallback' }
+  if (!candidates.length) return { recommendations: [], source: 'empty' }
 
   try {
     const { data, error } = await supabase.functions.invoke('recommend-opportunities', {

@@ -95,3 +95,4 @@ em { font-family: 'Playfair Display', Georgia, serif; font-weight: 600; }
 .review-card small { color: #8b9a95; font-size: 9px; }
 .review-card .row-actions { flex: 0 0 auto; }
 @media (max-width: 740px) { .page-intro-actions { justify-content: start; }.review-card { flex-direction: column; }.review-card .row-actions { width: 100%; } }
+.ai-badge.empty { color: #557267; background: #e8f0ec; }
