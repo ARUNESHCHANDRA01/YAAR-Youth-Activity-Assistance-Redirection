@@ -153,6 +153,9 @@ em { font-family: 'Playfair Display', Georgia, serif; font-weight: 600; }
 .assistant-search input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 12px; }
 .assistant-search button { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto; border: 0; border-radius: 8px; color: #fff; background: var(--green); cursor: pointer; }
 .assistant-search button:disabled { opacity: .65; cursor: wait; }
+.assistant-voice-button { width: 32px !important; color: var(--green) !important; background: #eaf4ed !important; }
+.assistant-voice-button.active { color: #fff !important; background: #a75c50 !important; box-shadow: 0 0 0 4px #f7e2dd; }
+.assistant-voice-status { margin: 8px 0 0; color: #6e877b; font-size: 10px; }
 .assistant-messages { display: flex; flex-direction: column; gap: 11px; max-height: 440px; padding: 16px 0; overflow-y: auto; }
 .assistant-message { display: flex; align-items: start; gap: 8px; max-width: 92%; }
 .assistant-message.volunteer { align-self: end; flex-direction: row-reverse; }

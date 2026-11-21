@@ -22,6 +22,7 @@ This repository contains the academic mini-project implementation for KCC Instit
 - Rule-based recommendation engine that works without external credentials.
 - Server-side OpenAI recommendation Edge Function with validated JSON output and automatic fallback.
 - Conversational Y.A.A.R. Personal Opportunity Assistant triggered by “yaar bore ho raha hoon” or “yaar bore ho rahi hoon”.
+- Browser voice mode with microphone permission, spoken prompts, wake-phrase listening and spoken recommendation summaries.
 - Supabase PostgreSQL migration with foreign keys, indexes, constraints and Row Level Security.
 - Demo mode backed by browser localStorage so the core UI is usable immediately.
 

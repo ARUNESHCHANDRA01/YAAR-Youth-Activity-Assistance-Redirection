@@ -47,6 +47,8 @@ For Edge Function deployment without Docker, run `npx supabase functions deploy 
 
 The volunteer dashboard includes the Y.A.A.R. Personal Opportunity Assistant. It is activated from the dashboard search card by submitting either “yaar bore ho raha hoon” or “yaar bore ho rahi hoon”. It asks for an interest, uses the volunteer profile location when available, and sends the interest plus eligible opportunity data to the same server-side recommendation function. If the function or OpenAI is unavailable, the client uses the deterministic recommendation fallback.
 
+The assistant also has a microphone control. After the volunteer grants microphone permission, browser speech recognition listens while the dashboard remains open, detects either wake phrase, speaks “What are your interests?”, captures the spoken interest, and reads a short recommendation summary aloud. The text input remains available as a fallback for browsers without speech recognition support.
+
 ## Provision a test administrator
 
 1. Register another account through the live sign-up form.

@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Archive, ArrowRight, Award, BarChart3, Bell, BookOpen, BriefcaseBusiness, CalendarDays, Check, ChevronRight,
-  CircleHelp, Clock3, Compass, Edit3, Filter, Heart, ImagePlus, Leaf, LogOut, MapPin, Menu, MessageCircle, Plus, Search,
+  CircleHelp, Clock3, Compass, Edit3, Filter, Heart, ImagePlus, Leaf, LogOut, MapPin, Menu, MessageCircle, Mic, MicOff, Plus, Search,
   RotateCcw, Settings, ShieldCheck, Sparkles, Target, Trash2, TrendingUp, UserRound, Users, X, Zap,
 } from 'lucide-react'
 import { categories, initialStore, loadStore } from './data'
@@ -267,6 +267,12 @@ function Dashboard() {
 
 function PageIntro({ eyebrow, title, text, action }: { eyebrow: string; title: string; text: string; action?: ReactNode }) { const location = useLocation(); const { user, store } = useApp(); const showAssistant = location.pathname === '/dashboard' && user?.role === 'volunteer'; return <><div className="page-intro"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{text}</p></div>{action}</div>{showAssistant && <OpportunityAssistant profile={user} opportunities={store.opportunities} />}</> }
 type AssistantMessage = { id: number; role: 'assistant' | 'volunteer'; text: string; recommendations?: Recommendation[] }
+type SpeechRecognitionAlternativeLike = { transcript: string }
+type SpeechRecognitionResultLike = { isFinal: boolean; [index: number]: SpeechRecognitionAlternativeLike }
+type SpeechRecognitionEventLike = { resultIndex: number; results: ArrayLike<SpeechRecognitionResultLike> }
+type SpeechRecognitionLike = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: SpeechRecognitionEventLike) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void }
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+type VoiceCapableWindow = Window & typeof globalThis & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }
 
 function normalizeWakePhrase(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
@@ -274,7 +280,12 @@ function normalizeWakePhrase(value: string) {
 
 function isAssistantWakePhrase(value: string) {
   const normalized = normalizeWakePhrase(value)
-  return normalized === 'yaar bore ho raha hoon' || normalized === 'yaar bore ho rahi hoon'
+  return ['yaar bore ho raha hoon', 'yaar bore ho rahi hoon'].some((phrase) => normalized === phrase || normalized.includes(phrase))
+}
+
+function speechRecognitionConstructor() {
+  const voiceWindow = window as VoiceCapableWindow
+  return voiceWindow.SpeechRecognition ?? voiceWindow.webkitSpeechRecognition
 }
 
 function OpportunityAssistant({ profile, opportunities }: { profile: Profile; opportunities: Opportunity[] }) {
@@ -285,12 +296,56 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
   const [phase, setPhase] = useState<'wake' | 'interest' | 'location'>('wake')
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<AssistantMessage[]>([])
+  const [voiceActive, setVoiceActive] = useState(false)
+  const [voiceMessage, setVoiceMessage] = useState('')
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const voiceActiveRef = useRef(false)
+  const suppressRecognitionRestartRef = useRef(false)
+  const phaseRef = useRef(phase)
 
   const addMessage = (message: Omit<AssistantMessage, 'id'>) => setMessages((current) => [...current, { ...message, id: Date.now() + Math.random() }])
-  const closeAssistant = () => { setOpen(false); setPhase('wake'); setInterest(''); setInput(''); setMessages([]) }
-  const resetAssistant = () => { setPhase('wake'); setInterest(''); setInput(''); setMessages([]); setOpen(true) }
-  const startConversation = (value: string) => { setOpen(true); setPhase('interest'); setInput(''); addMessage({ role: 'volunteer', text: value }); addMessage({ role: 'assistant', text: 'Bilkul! Aap kis type ke activity ya social work mein interested hain?' }) }
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  useEffect(() => () => { voiceActiveRef.current = false; recognitionRef.current?.stop(); window.speechSynthesis?.cancel() }, [])
+  const speak = (text: string) => { if (!('speechSynthesis' in window)) return; const recognition = recognitionRef.current; const resumeListening = voiceActiveRef.current; if (resumeListening && recognition) { suppressRecognitionRestartRef.current = true; recognition.stop() }; window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'en-IN'; utterance.rate = 0.95; utterance.onend = () => { if (resumeListening && voiceActiveRef.current && recognition) { suppressRecognitionRestartRef.current = false; try { recognition.start() } catch { /* already listening */ } } }; window.speechSynthesis.speak(utterance) }
+  const stopVoiceAssistant = () => { voiceActiveRef.current = false; setVoiceActive(false); setVoiceMessage('Voice assistant paused.'); recognitionRef.current?.stop(); recognitionRef.current = null; window.speechSynthesis?.cancel() }
+  const closeAssistant = () => { stopVoiceAssistant(); setOpen(false); phaseRef.current = 'wake'; setPhase('wake'); setInterest(''); setInput(''); setMessages([]) }
+  const resetAssistant = () => { phaseRef.current = 'wake'; setPhase('wake'); setInterest(''); setInput(''); setMessages([]); setOpen(true) }
+  const startConversation = (value: string) => { phaseRef.current = 'interest'; setOpen(true); setPhase('interest'); setInput(''); addMessage({ role: 'volunteer', text: value }); addMessage({ role: 'assistant', text: 'What are your interests?' }) }
   const handleInputChange = (value: string) => { setInput(value); if (!open && phase === 'wake' && isAssistantWakePhrase(value)) startConversation(value.trim()) }
+
+  const handleVoiceTranscript = async (transcript: string) => {
+    const value = transcript.trim()
+    if (!value || loading) return
+    setVoiceMessage(`Heard: ${value}`)
+    if (phaseRef.current === 'wake') {
+      if (isAssistantWakePhrase(value)) { startConversation(value); speak('What are your interests?') }
+      return
+    }
+    if (phaseRef.current === 'interest') {
+      setInterest(value); addMessage({ role: 'volunteer', text: value })
+      if (!profile.location.trim()) { phaseRef.current = 'location'; setPhase('location'); addMessage({ role: 'assistant', text: 'What location should I use to find nearby opportunities?' }); speak('What location should I use to find nearby opportunities?'); return }
+      await findRecommendations(value, profile.location)
+      return
+    }
+    addMessage({ role: 'volunteer', text: value }); await findRecommendations(interest, value)
+  }
+
+  const startVoiceAssistant = () => {
+    const Recognition = speechRecognitionConstructor()
+    if (!Recognition) { setVoiceMessage('Voice recognition is not supported in this browser. Try Google Chrome or use the text input.'); return }
+    if (voiceActiveRef.current) return
+    const recognition = new Recognition()
+    recognition.continuous = true
+    recognition.interimResults = false
+    recognition.lang = 'en-IN'
+    recognition.onresult = (event) => { for (let index = event.resultIndex; index < event.results.length; index += 1) if (event.results[index].isFinal) void handleVoiceTranscript(event.results[index][0].transcript) }
+    recognition.onerror = (event) => { if (event.error === 'not-allowed' || event.error === 'service-not-allowed') { voiceActiveRef.current = false; setVoiceActive(false); setVoiceMessage('Microphone permission is required. Allow microphone access and try again.') } else if (event.error !== 'no-speech') setVoiceMessage('I could not hear that clearly. Please try again.') }
+    recognition.onend = () => { if (voiceActiveRef.current && !suppressRecognitionRestartRef.current) { try { recognition.start() } catch { /* recognition is already restarting */ } } }
+    recognitionRef.current = recognition
+    voiceActiveRef.current = true
+    setVoiceActive(true); setOpen(true); setVoiceMessage('Listening for “yaar bore ho raha hoon”…')
+    try { recognition.start() } catch { voiceActiveRef.current = false; setVoiceActive(false); setVoiceMessage('Unable to start the microphone. Please try again.') }
+  }
 
   const findRecommendations = async (requestedInterest: string, requestedLocation: string) => {
     setLoading(true)
@@ -302,6 +357,8 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
       ? nearby.length ? `Here are the best matches near ${requestedLocation}.` : 'I couldn’t find an exact match nearby, but these related opportunities may interest you.'
       : 'I couldn’t find a suitable published opportunity nearby yet. Try another interest or a broader location.'
     addMessage({ role: 'assistant', text, recommendations })
+    speak(recommendations.length ? `${text} ${recommendations.slice(0, 3).map((item) => item.title).join('. ')}.` : text)
+    phaseRef.current = 'wake'
     setPhase('wake')
     setLoading(false)
   }
@@ -317,14 +374,14 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
     }
     if (phase === 'interest') {
       setInterest(value); addMessage({ role: 'volunteer', text: value })
-      if (!profile.location.trim()) { setPhase('location'); addMessage({ role: 'assistant', text: 'What location should I use to find nearby opportunities?' }); return }
+      if (!profile.location.trim()) { phaseRef.current = 'location'; setPhase('location'); addMessage({ role: 'assistant', text: 'What location should I use to find nearby opportunities?' }); return }
       await findRecommendations(value, profile.location)
       return
     }
     addMessage({ role: 'volunteer', text: value }); await findRecommendations(interest, value)
   }
 
-  return <section className={`assistant-card ${open ? 'open' : ''}`} aria-label="Y.A.A.R. Personal Opportunity Assistant"><div className="assistant-card-header"><div className="assistant-title"><span className="assistant-icon"><Sparkles size={17} /></span><div><span className="eyebrow">Y.A.A.R. PERSONAL OPPORTUNITY ASSISTANT</span><h2>Find something meaningful.</h2></div></div>{open && <button type="button" className="assistant-close" aria-label="Close assistant" onClick={closeAssistant}><X size={17} /></button>}</div>{!open ? <><p className="assistant-intro">Feeling bored? Tell me and I’ll help you find a nearby way to make an impact.</p><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => handleInputChange(event.target.value)} placeholder="Try: yaar bore ho raha hoon" aria-label="Ask the Y.A.A.R. assistant" /><button type="submit" aria-label="Start assistant"><ArrowRight size={17} /></button></form></> : <><div className="assistant-messages">{messages.map((message) => <div className={`assistant-message ${message.role}`} key={message.id}><span>{message.role === 'assistant' ? <Sparkles size={14} /> : profile.name.slice(0, 1)}</span><div><p>{message.text}</p>{message.recommendations?.length ? <div className="assistant-results">{message.recommendations.map((item) => <article className="assistant-result" key={item.id}><div><span className="eyebrow">{item.category} • {item.location}</span><h3>{item.title}</h3><p>{item.organization} • {Math.max(item.capacity - item.applicants, 0)} spots left • {formatDate(item.date)}</p><small>{item.reason}</small></div><div className="assistant-result-actions"><span className="match-score">{Math.max(item.score, 52)}%<small>match</small></span><Link to={`/opportunities/${item.id}`} className="text-link">View details <ArrowRight size={14} /></Link><button className="button button-primary button-small" onClick={() => { void apply(item.id) }}>Apply</button></div></article>)}</div> : null}</div></div>)}</div><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => handleInputChange(event.target.value)} placeholder={phase === 'interest' ? 'e.g. teaching, animals or technology' : phase === 'location' ? 'e.g. Greater Noida' : 'Start another search'} aria-label="Continue with the Y.A.A.R. assistant" /><button type="submit" aria-label="Send message" disabled={loading}>{loading ? '…' : <ArrowRight size={17} />}</button></form><button type="button" className="assistant-reset" onClick={resetAssistant}>Start a new search</button></>}</section>
+  return <section className={`assistant-card ${open ? 'open' : ''}`} aria-label="Y.A.A.R. Personal Opportunity Assistant"><div className="assistant-card-header"><div className="assistant-title"><span className="assistant-icon"><Sparkles size={17} /></span><div><span className="eyebrow">Y.A.A.R. PERSONAL OPPORTUNITY ASSISTANT</span><h2>Find something meaningful.</h2></div></div>{open && <button type="button" className="assistant-close" aria-label="Close assistant" onClick={closeAssistant}><X size={17} /></button>}</div>{!open ? <><p className="assistant-intro">Feeling bored? Tell me and I’ll help you find a nearby way to make an impact.</p><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => handleInputChange(event.target.value)} placeholder="Try: yaar bore ho raha hoon" aria-label="Ask the Y.A.A.R. assistant" /><button type="button" className={`assistant-voice-button ${voiceActive ? 'active' : ''}`} aria-label={voiceActive ? 'Stop voice assistant' : 'Start voice assistant'} aria-pressed={voiceActive} onClick={() => voiceActive ? stopVoiceAssistant() : startVoiceAssistant()}>{voiceActive ? <MicOff size={16} /> : <Mic size={16} />}</button><button type="submit" aria-label="Start assistant"><ArrowRight size={17} /></button></form>{voiceMessage && <p className="assistant-voice-status">{voiceMessage}</p>}</> : <><div className="assistant-messages">{messages.map((message) => <div className={`assistant-message ${message.role}`} key={message.id}><span>{message.role === 'assistant' ? <Sparkles size={14} /> : profile.name.slice(0, 1)}</span><div><p>{message.text}</p>{message.recommendations?.length ? <div className="assistant-results">{message.recommendations.map((item) => <article className="assistant-result" key={item.id}><div><span className="eyebrow">{item.category} • {item.location}</span><h3>{item.title}</h3><p>{item.organization} • {Math.max(item.capacity - item.applicants, 0)} spots left • {formatDate(item.date)}</p><small>{item.reason}</small></div><div className="assistant-result-actions"><span className="match-score">{Math.max(item.score, 52)}%<small>match</small></span><Link to={`/opportunities/${item.id}`} className="text-link">View details <ArrowRight size={14} /></Link><button className="button button-primary button-small" onClick={() => { void apply(item.id) }}>Apply</button></div></article>)}</div> : null}</div></div>)}</div><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => handleInputChange(event.target.value)} placeholder={phase === 'interest' ? 'e.g. teaching, animals or technology' : phase === 'location' ? 'e.g. Greater Noida' : 'Start another search'} aria-label="Continue with the Y.A.A.R. assistant" /><button type="button" className={`assistant-voice-button ${voiceActive ? 'active' : ''}`} aria-label={voiceActive ? 'Stop voice assistant' : 'Start voice assistant'} aria-pressed={voiceActive} onClick={() => voiceActive ? stopVoiceAssistant() : startVoiceAssistant()}>{voiceActive ? <MicOff size={16} /> : <Mic size={16} />}</button><button type="submit" aria-label="Send message" disabled={loading}>{loading ? '…' : <ArrowRight size={17} />}</button></form>{voiceMessage && <p className="assistant-voice-status">{voiceMessage}</p>}<button type="button" className="assistant-reset" onClick={resetAssistant}>Start a new search</button></>}</section>
 }
 
 function StatCard({ icon, label, value, note, tone, progress }: { icon: ReactNode; label: string; value: string; note: string; tone: string; progress?: number }) { return <div className="stat-card"><span className={`stat-icon ${tone}`}>{icon}</span><div><span className="stat-label">{label}</span><strong>{value}</strong><small>{note}</small>{progress && <div className="tiny-progress"><i style={{ width: `${progress}%` }} /></div>}</div></div> }
