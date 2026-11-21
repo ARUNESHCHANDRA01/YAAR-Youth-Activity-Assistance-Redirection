@@ -1,6 +1,9 @@
 import type { Opportunity, Profile } from '../types'
+import { supabase } from './supabase'
 
 export type Recommendation = Opportunity & { score: number; reason: string }
+export type RecommendationSource = 'openai' | 'fallback' | 'loading'
+export type RecommendationResult = { recommendations: Recommendation[]; source: Exclude<RecommendationSource, 'loading'> }
 
 export function recommend(profile: Profile, opportunities: Opportunity[]): Recommendation[] {
   return opportunities
@@ -14,4 +17,51 @@ export function recommend(profile: Profile, opportunities: Opportunity[]): Recom
       return { ...item, score, reason }
     })
     .sort((a, b) => b.score - a.score)
+}
+
+export function mergeAIRecommendations(opportunities: Opportunity[], payload: unknown): Recommendation[] {
+  if (!payload || typeof payload !== 'object') return []
+  const raw = (payload as { recommendations?: unknown }).recommendations
+  if (!Array.isArray(raw)) return []
+  const byId = new Map(opportunities.filter((item) => item.status === 'published').map((item) => [item.id, item]))
+  const seen = new Set<string>()
+  const merged: Recommendation[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const candidate = item as { opportunity_id?: unknown; score?: unknown; reason?: unknown }
+    const id = typeof candidate.opportunity_id === 'string' ? candidate.opportunity_id : ''
+    const score = typeof candidate.score === 'number' && Number.isFinite(candidate.score) ? candidate.score : NaN
+    const reason = typeof candidate.reason === 'string' ? candidate.reason.trim() : ''
+    const opportunity = byId.get(id)
+    if (!opportunity || seen.has(id) || !Number.isFinite(score) || !reason) continue
+    seen.add(id)
+    merged.push({ ...opportunity, score: Math.round(Math.max(0, Math.min(100, score))), reason: reason.slice(0, 100) })
+    if (merged.length === 5) break
+  }
+  return merged
+}
+
+export async function recommendWithAI(profile: Profile, opportunities: Opportunity[]): Promise<RecommendationResult> {
+  const fallback = recommend(profile, opportunities)
+  if (!supabase) return { recommendations: fallback, source: 'fallback' }
+
+  const candidates = opportunities
+    .filter((item) => item.status === 'published')
+    .slice(0, 40)
+    .map((item) => ({ id: item.id, title: item.title, category: item.category, location: item.location, skills: item.skills, date: item.date }))
+  if (!candidates.length) return { recommendations: fallback, source: 'fallback' }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('recommend-opportunities', {
+      body: {
+        profile: { interests: profile.interests, skills: profile.skills, location: profile.location, availability: profile.availability },
+        opportunities: candidates,
+      },
+    })
+    if (error) throw error
+    const recommendations = mergeAIRecommendations(opportunities, data)
+    return recommendations.length ? { recommendations, source: 'openai' } : { recommendations: fallback, source: 'fallback' }
+  } catch {
+    return { recommendations: fallback, source: 'fallback' }
+  }
 }

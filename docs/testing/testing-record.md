@@ -21,11 +21,11 @@ Date: 18 November 2026
 | Search, filtering and sorting | Implemented | browser verification recommended before submission |
 | Duplicate application prevention | Implemented and guarded in state layer | production uniqueness is also in SQL |
 | Application status updates | Implemented | organization accepts/declines in demo |
-| Rule-based recommendations | Passed | deterministic smoke test |
-| Missing AI key fallback | Implemented | Edge Function returns fallback source |
+| Recommendation ranking and AI response validation | Passed | deterministic smoke test covers ranking, published-only filtering and malformed/unknown AI records |
+| Missing AI key fallback | Implemented | Edge Function returns fallback source and the client uses deterministic ranking |
 | Supabase Auth and RLS | Schema reachable; live session/RLS flows pending | Tables responded; authenticated role matrix still requires test accounts |
 | Responsive layout and keyboard navigation | Implemented in CSS/semantic controls | manual browser pass pending |
 
 ## Known limitations
 
-Real authentication, password reset, authenticated RLS enforcement, OpenAI response success, browser console inspection and deployment still require live test accounts, Edge Function deployment and a deployment target.
+Real authentication, password reset, authenticated RLS enforcement, live OpenAI response success, browser console inspection and deployment still require live test accounts, the Edge Function secret and a deployment target. The local client path validates AI recommendation IDs, scores and reasons before display.

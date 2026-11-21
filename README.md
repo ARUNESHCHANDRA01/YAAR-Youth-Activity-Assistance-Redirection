@@ -18,7 +18,7 @@ This repository contains the academic mini-project implementation for KCC Instit
 - Organization opportunity creation and applicant review.
 - Administrator overview with platform statistics and moderation table.
 - Rule-based recommendation engine that works without external credentials.
-- Optional server-side OpenAI recommendation Edge Function with validated JSON output.
+- Server-side OpenAI recommendation Edge Function with validated JSON output and automatic fallback.
 - Supabase PostgreSQL migration with foreign keys, indexes, constraints and Row Level Security.
 - Demo mode backed by browser localStorage so the core UI is usable immediately.
 
@@ -63,10 +63,10 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 4. Add the project URL and anonymous key to `.env`.
 5. Apply `supabase/migrations/20261118000100_initial_yaar.sql` with the Supabase CLI or SQL editor.
 6. Configure authentication redirect URLs for `http://localhost:5173/login` and the deployed `/login` route.
-7. Deploy `supabase/functions/recommend-opportunities/index.ts` if OpenAI recommendations are required.
+7. Deploy `supabase/functions/recommend-opportunities/index.ts` with `supabase functions deploy recommend-opportunities`.
 8. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
 
-The frontend continues to work with rule-based recommendations when Supabase or OpenAI is not configured. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
+The volunteer dashboard calls the `recommend-opportunities` Edge Function when a live Supabase session exists. The Edge Function keeps `OPENAI_API_KEY` server-side, returns validated opportunity IDs, scores and explanations, and the client merges only known published opportunities. The frontend continues to work with rule-based recommendations when Supabase, the Edge Function or OpenAI is unavailable. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
 
 ## Roles
 
@@ -78,7 +78,7 @@ The frontend continues to work with rule-based recommendations when Supabase or 
 
 ## Architecture
 
-The current client uses React Router and a small application context for predictable local state and live Supabase refreshes. The Supabase client boundary is isolated in `src/lib/supabase.ts`; live row mapping and mutations are in `src/lib/supabaseData.ts`; the normalized database and RLS model live in `supabase/migrations/`. Recommendation scoring is implemented in `src/lib/recommendations.ts`, while the optional secret-bearing integration is an Edge Function.
+The current client uses React Router and a small application context for predictable local state and live Supabase refreshes. The Supabase client boundary is isolated in `src/lib/supabase.ts`; live row mapping and mutations are in `src/lib/supabaseData.ts`; the normalized database and RLS model live in `supabase/migrations/`. Recommendation scoring and AI response merging are implemented in `src/lib/recommendations.ts`, while the secret-bearing OpenAI integration runs in the `recommend-opportunities` Edge Function.
 
 See the reproducible Mermaid sources in `docs/diagrams/` for the architecture, use cases, data flow and entity relationships.
 
@@ -112,7 +112,7 @@ Intended GitHub repository name: `YAAR-Youth-Activity-Assistance-Redirection`. A
 
 - The browser demo store remains available as a fallback; live tables must contain organization/opportunity records before the live directory has content.
 - Password reset and production email verification are delegated to Supabase Auth configuration and require a live Auth test.
-- AI recommendations are optional; deterministic scoring is the guaranteed fallback.
+- AI recommendations require the deployed Edge Function and `OPENAI_API_KEY`; deterministic scoring is the guaranteed fallback when either is unavailable.
 - GitHub publication and deployment are not claimed unless credentials and a remote are available and verified.
 
 ## Future scope
