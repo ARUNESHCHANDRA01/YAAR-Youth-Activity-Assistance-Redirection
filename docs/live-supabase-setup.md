@@ -43,6 +43,8 @@ npx supabase db push --remote
 
 This applies the opportunity approval, seeded catalog and management-enhancement migrations. The latest migration adds availability filtering, opportunity photos through the `opportunity-media` Storage bucket, and restricts volunteers to withdrawing their own applications; organization owners and administrators retain management permissions.
 
+The volunteer dashboard includes the Y.A.A.R. Personal Opportunity Assistant. It is activated from the dashboard search card by submitting either “yaar bore ho raha hoon” or “yaar bore ho rahi hoon”. It asks for an interest, uses the volunteer profile location when available, and sends the interest plus eligible opportunity data to the same server-side recommendation function. If the function or OpenAI is unavailable, the client uses the deterministic recommendation fallback.
+
 ## Provision a test administrator
 
 1. Register another account through the live sign-up form.

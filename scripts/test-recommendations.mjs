@@ -63,3 +63,17 @@ const selectedPhotos = [{ type: 'image/jpeg', size: 1024 }, { type: 'image/png',
 assert.equal(selectedPhotos.every((file) => file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024), true)
 assert.equal(selectedPhotos.length <= 5, true)
 console.log('PASS opportunity photo validation limits type, size and count')
+
+function normalizeWakePhrase(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
+}
+const wakePhrases = ['yaar bore ho raha hoon', 'yaar bore ho rahi hoon']
+assert.equal(wakePhrases.includes(normalizeWakePhrase('  YAAR,   bore ho raha hoon!!! ')), true)
+assert.equal(wakePhrases.includes(normalizeWakePhrase('Yaar bore ho rahi hoon')), true)
+assert.equal(wakePhrases.includes(normalizeWakePhrase('yaar busy hoon')), false)
+console.log('PASS assistant wake phrase normalization')
+
+const interestRequest = 'teaching'
+const interestMatches = opportunities.filter((item) => item.status === 'published' && `${item.title} ${item.category} ${item.skills.join(' ')}`.toLowerCase().includes(interestRequest))
+assert.deepEqual(interestMatches.map((item) => item.id), ['education-local'])
+console.log('PASS assistant interest matching')

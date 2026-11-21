@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { Link, Navigate, NavLink, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Archive, ArrowRight, Award, BarChart3, Bell, BookOpen, BriefcaseBusiness, CalendarDays, Check, ChevronRight,
   CircleHelp, Clock3, Compass, Edit3, Filter, Heart, ImagePlus, Leaf, LogOut, MapPin, Menu, MessageCircle, Plus, Search,
@@ -9,7 +9,7 @@ import {
 import { categories, initialStore, loadStore } from './data'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { createLiveApplication, createLiveOpportunity, deleteLiveOpportunity, loadLiveStore, profileForSession, reviewLiveOpportunity, saveLiveOpportunity, updateLiveApplication, updateLiveOpportunity, updateLiveOrganization, updateLiveProfile, uploadLiveOpportunityImages } from './lib/supabaseData'
-import { recommend, recommendWithAI, type Recommendation, type RecommendationSource } from './lib/recommendations'
+import { isOpportunityNearby, recommend, recommendWithAI, type Recommendation, type RecommendationSource } from './lib/recommendations'
 import type { ApplicationStatus, Opportunity, Profile, Role, Store } from './types'
 
 type AppContextValue = {
@@ -265,7 +265,66 @@ function Dashboard() {
   return <div className="dashboard-page"><PageIntro eyebrow="YOUR VOLUNTEER SPACE" title={`Good morning, ${profile.name.split(' ')[0]}.`} text="A little direction can turn a free hour into something that stays with you." action={<Link to="/opportunities" className="button button-primary"><Compass size={17} /> Find an opportunity</Link>} /><div className="stat-cards"><StatCard icon={<Target />} label="Profile completion" value={`${profile.completion}%`} note="Almost there — add availability" tone="green" progress={profile.completion} /><StatCard icon={<BriefcaseBusiness />} label="Active applications" value={String(apps.length)} note="1 accepted recently" tone="yellow" /><StatCard icon={<Award />} label="Impact points" value="124" note="Top 18% this month" tone="blue" /></div><div className="dashboard-grid"><section className="panel recommendations-panel"><div className="panel-heading"><div><span className="eyebrow">MADE FOR YOU</span><h2>Recommended next steps</h2></div><span className={`ai-badge ${recommendationSource === 'fallback' ? 'fallback' : recommendationSource === 'empty' ? 'empty' : ''}`}><Sparkles size={14} /> {recommendationBadge}</span></div><p className="panel-subtext">{recommendationLabel} Based on your interests, skills and location.</p><div className="recommendation-list">{recommendations.slice(0, 3).map((item) => <RecommendationRow key={item.id} recommendation={item} />)}</div><Link to="/opportunities" className="button button-light full">Explore all opportunities <ArrowRight size={16} /></Link></section><section className="panel upcoming-panel"><div className="panel-heading"><div><span className="eyebrow">ON YOUR RADAR</span><h2>Application snapshot</h2></div><Link to="/applications" className="icon-link"><ArrowRight size={17} /></Link></div><div className="ring-wrap"><div className="progress-ring" style={{ '--progress': `${Math.min(apps.length * 25 + 25, 100)}%` } as React.CSSProperties}><strong>{apps.length}</strong><small>active</small></div><div><strong>Keep showing up</strong><p>Every application is a step toward the right kind of experience.</p></div></div><div className="mini-timeline">{apps.slice(0, 2).map((app) => { const op = store.opportunities.find((o) => o.id === app.opportunityId); return <div key={app.id}><span className={`timeline-dot ${app.status}`} /><div><strong>{op?.title}</strong><small><span className={`status-text ${app.status}`}>{app.status}</span> • {app.createdAt}</small></div></div> })}</div></section></div></div>
 }
 
-function PageIntro({ eyebrow, title, text, action }: { eyebrow: string; title: string; text: string; action?: ReactNode }) { return <div className="page-intro"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{text}</p></div>{action}</div> }
+function PageIntro({ eyebrow, title, text, action }: { eyebrow: string; title: string; text: string; action?: ReactNode }) { const location = useLocation(); const { user, store } = useApp(); const showAssistant = location.pathname === '/dashboard' && user?.role === 'volunteer'; return <><div className="page-intro"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{text}</p></div>{action}</div>{showAssistant && <OpportunityAssistant profile={user} opportunities={store.opportunities} />}</> }
+type AssistantMessage = { id: number; role: 'assistant' | 'volunteer'; text: string; recommendations?: Recommendation[] }
+
+function normalizeWakePhrase(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
+}
+
+function isAssistantWakePhrase(value: string) {
+  const normalized = normalizeWakePhrase(value)
+  return normalized === 'yaar bore ho raha hoon' || normalized === 'yaar bore ho rahi hoon'
+}
+
+function OpportunityAssistant({ profile, opportunities }: { profile: Profile; opportunities: Opportunity[] }) {
+  const { apply } = useApp()
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
+  const [interest, setInterest] = useState('')
+  const [phase, setPhase] = useState<'wake' | 'interest' | 'location'>('wake')
+  const [loading, setLoading] = useState(false)
+  const [messages, setMessages] = useState<AssistantMessage[]>([])
+
+  const addMessage = (message: Omit<AssistantMessage, 'id'>) => setMessages((current) => [...current, { ...message, id: Date.now() + Math.random() }])
+  const closeAssistant = () => { setOpen(false); setPhase('wake'); setInterest(''); setInput(''); setMessages([]) }
+  const resetAssistant = () => { setPhase('wake'); setInterest(''); setInput(''); setMessages([]); setOpen(true) }
+
+  const findRecommendations = async (requestedInterest: string, requestedLocation: string) => {
+    setLoading(true)
+    addMessage({ role: 'assistant', text: `I’m looking for ${requestedInterest.toLowerCase()} opportunities near ${requestedLocation}.` })
+    const result = await recommendWithAI({ ...profile, location: requestedLocation }, opportunities, requestedInterest)
+    const nearby = result.recommendations.filter((item) => isOpportunityNearby(requestedLocation, item.location))
+    const recommendations = (nearby.length ? nearby : result.recommendations).slice(0, 5)
+    const text = recommendations.length
+      ? nearby.length ? `Here are the best matches near ${requestedLocation}.` : 'I couldn’t find an exact match nearby, but these related opportunities may interest you.'
+      : 'I couldn’t find a suitable published opportunity nearby yet. Try another interest or a broader location.'
+    addMessage({ role: 'assistant', text, recommendations })
+    setPhase('wake')
+    setLoading(false)
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const value = input.trim()
+    if (!value || loading) return
+    setInput('')
+    if (phase === 'wake') {
+      if (!isAssistantWakePhrase(value)) { setOpen(true); addMessage({ role: 'assistant', text: 'I’m ready to help. Start by typing “yaar bore ho raha hoon” or “yaar bore ho rahi hoon”.' }); return }
+      setOpen(true); setPhase('interest'); addMessage({ role: 'volunteer', text: value }); addMessage({ role: 'assistant', text: 'Bilkul! Aap kis type ke activity ya social work mein interested hain?' }); return
+    }
+    if (phase === 'interest') {
+      setInterest(value); addMessage({ role: 'volunteer', text: value })
+      if (!profile.location.trim()) { setPhase('location'); addMessage({ role: 'assistant', text: 'What location should I use to find nearby opportunities?' }); return }
+      await findRecommendations(value, profile.location)
+      return
+    }
+    addMessage({ role: 'volunteer', text: value }); await findRecommendations(interest, value)
+  }
+
+  return <section className={`assistant-card ${open ? 'open' : ''}`} aria-label="Y.A.A.R. Personal Opportunity Assistant"><div className="assistant-card-header"><div className="assistant-title"><span className="assistant-icon"><Sparkles size={17} /></span><div><span className="eyebrow">Y.A.A.R. PERSONAL OPPORTUNITY ASSISTANT</span><h2>Find something meaningful.</h2></div></div>{open && <button type="button" className="assistant-close" aria-label="Close assistant" onClick={closeAssistant}><X size={17} /></button>}</div>{!open ? <><p className="assistant-intro">Feeling bored? Tell me and I’ll help you find a nearby way to make an impact.</p><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Try: yaar bore ho raha hoon" aria-label="Ask the Y.A.A.R. assistant" /><button type="submit" aria-label="Start assistant"><ArrowRight size={17} /></button></form></> : <><div className="assistant-messages">{messages.map((message) => <div className={`assistant-message ${message.role}`} key={message.id}><span>{message.role === 'assistant' ? <Sparkles size={14} /> : profile.name.slice(0, 1)}</span><div><p>{message.text}</p>{message.recommendations?.length ? <div className="assistant-results">{message.recommendations.map((item) => <article className="assistant-result" key={item.id}><div><span className="eyebrow">{item.category} • {item.location}</span><h3>{item.title}</h3><p>{item.organization} • {Math.max(item.capacity - item.applicants, 0)} spots left • {formatDate(item.date)}</p><small>{item.reason}</small></div><div className="assistant-result-actions"><span className="match-score">{Math.max(item.score, 52)}%<small>match</small></span><Link to={`/opportunities/${item.id}`} className="text-link">View details <ArrowRight size={14} /></Link><button className="button button-primary button-small" onClick={() => { void apply(item.id) }}>Apply</button></div></article>)}</div> : null}</div></div>)}</div><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={phase === 'interest' ? 'e.g. teaching, animals or technology' : phase === 'location' ? 'e.g. Greater Noida' : 'Start another search'} aria-label="Continue with the Y.A.A.R. assistant" /><button type="submit" aria-label="Send message" disabled={loading}>{loading ? '…' : <ArrowRight size={17} />}</button></form><button type="button" className="assistant-reset" onClick={resetAssistant}>Start a new search</button></>}</section>
+}
+
 function StatCard({ icon, label, value, note, tone, progress }: { icon: ReactNode; label: string; value: string; note: string; tone: string; progress?: number }) { return <div className="stat-card"><span className={`stat-icon ${tone}`}>{icon}</span><div><span className="stat-label">{label}</span><strong>{value}</strong><small>{note}</small>{progress && <div className="tiny-progress"><i style={{ width: `${progress}%` }} /></div>}</div></div> }
 function RecommendationRow({ recommendation }: { recommendation: Recommendation }) { const { store, save } = useApp(); const saved = store.saved.includes(recommendation.id); return <Link to={`/opportunities/${recommendation.id}`} className="recommendation-row"><span className={`opportunity-icon ${recommendation.accent}`}><Leaf size={18} /></span><span className="recommendation-copy"><strong>{recommendation.title}</strong><small>{recommendation.organization} • {recommendation.reason}</small></span><span className="match-score">{Math.max(recommendation.score, 52)}%<small>match</small></span><button className="save-small" aria-label={saved ? 'Saved' : 'Save opportunity'} onClick={(event) => { event.preventDefault(); save(recommendation.id) }}><Heart size={17} fill={saved ? 'currentColor' : 'none'} /></button></Link> }
 

@@ -21,6 +21,7 @@ This repository contains the academic mini-project implementation for KCC Instit
 - Administrator overview with platform statistics and moderation table.
 - Rule-based recommendation engine that works without external credentials.
 - Server-side OpenAI recommendation Edge Function with validated JSON output and automatic fallback.
+- Conversational Y.A.A.R. Personal Opportunity Assistant triggered by “yaar bore ho raha hoon” or “yaar bore ho rahi hoon”.
 - Supabase PostgreSQL migration with foreign keys, indexes, constraints and Row Level Security.
 - Demo mode backed by browser localStorage so the core UI is usable immediately.
 
@@ -68,7 +69,7 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 7. Deploy `supabase/functions/recommend-opportunities/index.ts` with `supabase functions deploy recommend-opportunities`.
 8. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
 
-The volunteer dashboard calls the `recommend-opportunities` Edge Function when a live Supabase session exists. The Edge Function keeps `OPENAI_API_KEY` server-side, returns validated opportunity IDs, scores and explanations, and the client merges only known published opportunities. The frontend continues to work with rule-based recommendations when Supabase, the Edge Function or OpenAI is unavailable. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
+The volunteer dashboard calls the `recommend-opportunities` Edge Function when a live Supabase session exists. The Edge Function keeps `OPENAI_API_KEY` server-side, accepts the assistant’s current interest request, returns validated opportunity IDs, scores and explanations, and the client merges only eligible published opportunities. The frontend continues to work with rule-based recommendations when Supabase, the Edge Function or OpenAI is unavailable. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
 
 ## Roles
 
