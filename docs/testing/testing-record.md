@@ -1,6 +1,6 @@
 # Y.A.A.R. Testing Record
 
-Date: 18 November 2026
+Date: 21 November 2026
 
 ## Automated checks
 
@@ -25,7 +25,11 @@ Date: 18 November 2026
 | Missing AI key fallback | Implemented | Edge Function returns fallback source and the client uses deterministic ranking |
 | Supabase Auth and RLS | Schema reachable; live session/RLS flows pending | Tables responded; authenticated role matrix still requires test accounts |
 | Responsive layout and keyboard navigation | Implemented in CSS/semantic controls | manual browser pass pending |
+| Opportunity management controls | Implemented | edit, publish/unpublish, archive/reopen and delete paths added; live RLS pass pending |
+| Skill, availability and date discovery filters | Implemented | browser verification recommended after live catalog migration |
+| Organization details | Implemented | organization dashboard profile panel updates local/live organization records |
+| Production database seed and latest migration | Pending live confirmation | run `npx supabase db push --remote` and verify the remote migration history |
 
 ## Known limitations
 
-Real authentication, password reset, authenticated RLS enforcement, live OpenAI response success, browser console inspection and deployment still require live test accounts, the Edge Function secret and a deployment target. The local client path validates AI recommendation IDs, scores and reasons before display.
+Real authentication, password reset, authenticated RLS enforcement, live OpenAI response success, browser console inspection, mobile/keyboard inspection and deployment still require live test accounts, the Edge Function secret and the latest remote migrations. The local client path validates AI recommendation IDs, scores and reasons before display.

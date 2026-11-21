@@ -1,6 +1,6 @@
 # Browser Evidence Record
 
-Date: 18 November 2026
+Date: 21 November 2026
 
 The local Vite application was opened at `http://127.0.0.1:5173/` and inspected in the in-app browser. The following real states were observed:
 
@@ -15,3 +15,7 @@ The local Vite application was opened at `http://127.0.0.1:5173/` and inspected 
 | `/admin` as administrator | Platform metrics, activity list, category bars and moderation table |
 
 The observed UI states are genuine local application output. No production users, credentials, external accounts or screenshots from an unrelated source were used.
+
+## Follow-up verification required
+
+The current implementation also includes organization detail editing, opportunity edit/publish/unpublish/archive/reopen/delete controls, and skill/availability/date filters. These follow-up states are not claimed as browser evidence until the latest Supabase migration is applied and the three live role accounts are tested.

@@ -33,6 +33,16 @@ values ('AUTH_USER_UUID', 'GreenSteps Foundation', 'Community environmental acti
 
 The SQL Editor is a privileged administrative surface. Do not run role-provisioning SQL from the browser client.
 
+## Apply current opportunity-management migrations
+
+From the project root, run:
+
+```bash
+npx supabase db push --remote
+```
+
+This applies the opportunity approval, seeded catalog and management-enhancement migrations. The latest migration adds availability filtering, opportunity photos through the `opportunity-media` Storage bucket, and restricts volunteers to withdrawing their own applications; organization owners and administrators retain management permissions.
+
 ## Provision a test administrator
 
 1. Register another account through the live sign-up form.
@@ -53,3 +63,5 @@ where id = 'AUTH_ADMIN_UUID';
 4. Sign in as the organization and accept or reject the application.
 5. Sign in as the administrator and confirm the overview is restricted to administrator navigation.
 6. Attempt to access an unrelated application or opportunity to verify RLS denies it.
+7. As an organization, edit, publish, unpublish, archive, reopen and delete only your own opportunity.
+8. As a volunteer, verify skill, availability and date filters, then confirm unpublished and closed opportunities cannot be applied to.

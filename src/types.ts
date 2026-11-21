@@ -17,6 +17,15 @@ export type Profile = {
   completion: number
 }
 
+export type Organization = {
+  id: string
+  ownerId: string
+  name: string
+  description: string
+  location: string
+  verified: boolean
+}
+
 export type Opportunity = {
   id: string
   title: string
@@ -29,6 +38,9 @@ export type Opportunity = {
   timeCommitment: string
   deadline: string
   skills: string[]
+  availability?: string
+  contactEmail?: string
+  imageUrls?: string[]
   capacity: number
   applicants: number
   status: OpportunityStatus
@@ -48,6 +60,7 @@ export type Application = {
 
 export type Store = {
   profiles: Profile[]
+  organizations: Organization[]
   opportunities: Opportunity[]
   applications: Application[]
   saved: string[]

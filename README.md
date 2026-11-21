@@ -13,9 +13,11 @@ This repository contains the academic mini-project implementation for KCC Instit
 - Responsive public landing page and authenticated application shell.
 - Volunteer, organization and administrator role experiences.
 - Profile management with interests, skills, location, availability and experience.
-- Opportunity discovery with search, category/location filters and sorting.
+- Opportunity discovery with search, category/location/skill/availability/date filters and sorting.
 - Opportunity detail pages, save-for-later and application workflow.
-- Organization opportunity creation and applicant review.
+- Opportunity photo uploads with local previews and Supabase Storage-backed galleries.
+- Organization opportunity creation, editing, publishing, archiving, deletion and applicant review.
+- Organization profile details with verified status and coordination contact information.
 - Administrator overview with platform statistics and moderation table.
 - Rule-based recommendation engine that works without external credentials.
 - Server-side OpenAI recommendation Edge Function with validated JSON output and automatic fallback.
@@ -61,7 +63,7 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 2. Enable the Google provider under **Authentication → Providers → Google** and enter the Google OAuth client ID and secret.
 3. In Google Cloud Console, add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized redirect URI.
 4. Add the project URL and anonymous key to `.env`.
-5. Apply `supabase/migrations/20261118000100_initial_yaar.sql` with the Supabase CLI or SQL editor.
+5. Apply all migrations, including `20261121000300_opportunity_management_enhancements.sql`, with the Supabase CLI or SQL editor. This creates the `opportunity-media` public bucket and its owner upload policies.
 6. Configure authentication redirect URLs for `http://localhost:5173/login` and the deployed `/login` route.
 7. Deploy `supabase/functions/recommend-opportunities/index.ts` with `supabase functions deploy recommend-opportunities`.
 8. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
@@ -73,7 +75,7 @@ The volunteer dashboard calls the `recommend-opportunities` Edge Function when a
 | Role | Main capabilities |
 | --- | --- |
 | Volunteer | Manage profile, discover/filter opportunities, save opportunities, apply, withdraw and track status |
-| Organization | Create/manage opportunities, view the applicant queue and accept/decline applicants |
+| Organization | Maintain organization details, create/edit/publish/archive opportunities, view the applicant queue and accept/decline applicants |
 | Administrator | View platform summary, opportunity directory and application activity |
 
 ## Architecture
@@ -113,6 +115,7 @@ Intended GitHub repository name: `YAAR-Youth-Activity-Assistance-Redirection`. A
 - The browser demo store remains available as a fallback; live tables must contain organization/opportunity records before the live directory has content.
 - Password reset and production email verification are delegated to Supabase Auth configuration and require a live Auth test.
 - AI recommendations require the deployed Edge Function and `OPENAI_API_KEY`; deterministic scoring is the guaranteed fallback when either is unavailable.
+- The final production verification still requires a live organization, volunteer and administrator test pass after the latest database migrations are applied.
 - GitHub publication and deployment are not claimed unless credentials and a remote are available and verified.
 
 ## Future scope

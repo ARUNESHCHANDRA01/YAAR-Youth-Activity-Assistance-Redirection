@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { ApplicationStatus, Opportunity, OpportunityReviewStatus, Profile, Store } from '../types'
+import type { ApplicationStatus, Opportunity, OpportunityReviewStatus, Organization, Profile, Store } from '../types'
 
 type OpportunityRow = {
   id: string
@@ -13,7 +13,10 @@ type OpportunityRow = {
   time_commitment: string
   application_deadline: string
   required_skills: string[] | null
+  availability?: string | null
   volunteer_capacity: number
+  contact_email?: string | null
+  image_urls?: string[] | null
   status: Opportunity['status']
   review_status?: OpportunityReviewStatus
   created_by?: string | null
@@ -58,7 +61,7 @@ export async function profileForSession(session: Session): Promise<Profile> {
 
 function opportunityFromRow(row: OpportunityRow): Opportunity {
   const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
-  return { id: row.id, title: row.title, organization: row.partner_name ?? organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, featured: Boolean(row.featured), accent: accentForCategory(row.category) }
+  return { id: row.id, title: row.title, organization: row.partner_name ?? organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], availability: row.availability ?? 'Flexible', contactEmail: row.contact_email ?? undefined, imageUrls: row.image_urls ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, featured: Boolean(row.featured), accent: accentForCategory(row.category) }
 }
 
 function accentForCategory(category: string) {
@@ -73,6 +76,9 @@ function accentForCategory(category: string) {
 
 export async function loadLiveStore(profile: Profile | null): Promise<Store> {
   const client = requireClient()
+  const { data: organizationRows, error: organizationError } = await client.from('organizations').select('id, owner_id, name, description, location, verified')
+  if (organizationError) throw organizationError
+  const organizations: Organization[] = (organizationRows ?? []).map((row) => ({ id: String(row.id), ownerId: String(row.owner_id), name: String(row.name), description: String(row.description ?? ''), location: String(row.location ?? ''), verified: Boolean(row.verified) }))
   const { data: opportunityRows, error: opportunityError } = await client.from('opportunities').select('*, organizations(name, owner_id)').order('activity_date', { ascending: true })
   if (opportunityError) throw opportunityError
   const opportunities = ((opportunityRows ?? []) as OpportunityRow[]).map(opportunityFromRow)
@@ -104,7 +110,7 @@ export async function loadLiveStore(profile: Profile | null): Promise<Store> {
     if (savedError) throw savedError
     saved = (savedRows ?? []).map((row) => String((row as Record<string, unknown>).opportunity_id))
   }
-  return { profiles, opportunities, applications, saved }
+  return { profiles, organizations, opportunities, applications, saved }
 }
 
 export async function updateLiveProfile(userId: string, data: Partial<Profile>) {
@@ -145,8 +151,51 @@ export async function createLiveOpportunity(opportunity: Opportunity, ownerId: s
     if (organizationError) throw organizationError
     organizationId = organization.id
   }
-  const { error } = await client.from('opportunities').insert({ organization_id: organizationId, created_by: ownerId, title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : 'approved' })
+  const { data: row, error } = await client.from('opportunities').insert({ organization_id: organizationId, created_by: ownerId, title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, availability: opportunity.availability ?? 'Flexible', contact_email: opportunity.contactEmail ?? null, image_urls: [], volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : 'approved' }).select('id').single()
   if (error) throw error
+  return String(row.id)
+}
+
+export async function updateLiveOpportunity(opportunity: Opportunity, ownerId: string, ownerRole: Profile['role']) {
+  const client = requireClient()
+  let query = client.from('opportunities').update({ title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, availability: opportunity.availability ?? 'Flexible', contact_email: opportunity.contactEmail ?? null, image_urls: opportunity.imageUrls ?? [], volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : (opportunity.reviewStatus ?? 'approved') }).eq('id', opportunity.id)
+  if (ownerRole !== 'administrator') query = query.eq('created_by', ownerId)
+  const { error } = await query
+  if (error) throw error
+}
+
+export async function uploadLiveOpportunityImages(opportunityId: string, ownerId: string, ownerRole: Profile['role'], files: File[], existingUrls: string[]) {
+  if (!files.length) return existingUrls
+  const client = requireClient()
+  const uploadedUrls: string[] = []
+  for (const file of files) {
+    const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-')
+    const path = `${ownerId}/${opportunityId}/${crypto.randomUUID()}-${safeName}`
+    const { error: uploadError } = await client.storage.from('opportunity-media').upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'image/*' })
+    if (uploadError) throw uploadError
+    uploadedUrls.push(client.storage.from('opportunity-media').getPublicUrl(path).data.publicUrl)
+  }
+  const imageUrls = [...existingUrls, ...uploadedUrls]
+  let query = client.from('opportunities').update({ image_urls: imageUrls }).eq('id', opportunityId)
+  if (ownerRole !== 'administrator') query = query.eq('created_by', ownerId)
+  const { error } = await query
+  if (error) throw error
+  return imageUrls
+}
+
+export async function deleteLiveOpportunity(opportunityId: string, ownerId: string, ownerRole: Profile['role']) {
+  const client = requireClient()
+  let query = client.from('opportunities').delete().eq('id', opportunityId)
+  if (ownerRole !== 'administrator') query = query.eq('created_by', ownerId)
+  const { error } = await query
+  if (error) throw error
+}
+
+export async function updateLiveOrganization(ownerId: string, data: Pick<Organization, 'name' | 'description' | 'location'>) {
+  const client = requireClient()
+  const { data: row, error } = await client.from('organizations').update(data).eq('owner_id', ownerId).select('id, owner_id, name, description, location, verified').single()
+  if (error) throw error
+  return { id: String(row.id), ownerId: String(row.owner_id), name: String(row.name), description: String(row.description ?? ''), location: String(row.location ?? ''), verified: Boolean(row.verified) } satisfies Organization
 }
 
 export async function reviewLiveOpportunity(opportunityId: string, reviewStatus: OpportunityReviewStatus) {

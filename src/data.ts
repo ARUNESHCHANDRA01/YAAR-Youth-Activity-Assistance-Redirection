@@ -1,4 +1,4 @@
-import type { Application, Opportunity, Profile, Store } from './types'
+import type { Application, Opportunity, Organization, Profile, Store } from './types'
 
 export const categories = ['Environment', 'Education', 'Health', 'Community', 'Technology', 'Animal welfare']
 
@@ -20,6 +20,11 @@ export const demoProfiles: Profile[] = [
   },
 ]
 
+export const demoOrganizations: Organization[] = [
+  { id: 'org-greensteps-record', ownerId: 'org-greensteps', name: 'GreenSteps Foundation', description: 'Local community organization creating hands-on environmental action.', location: 'Greater Noida', verified: true },
+  { id: 'org-udaan-record', ownerId: 'org-udaan', name: 'Udaan Learning Centre', description: 'A learning space helping young people build confidence through practical education.', location: 'Noida', verified: true },
+]
+
 export const demoOpportunities: Opportunity[] = [
   { id: 'opp-1', title: 'Yamuna Clean-up Drive', organization: 'GreenSteps Foundation', organizationId: 'org-greensteps', description: 'Join a friendly weekend clean-up and help restore a local stretch of the Yamuna. Gloves, safety briefing and refreshments are provided.', category: 'Environment', location: 'Greater Noida', date: '2026-12-06', timeCommitment: '4 hours', deadline: '2026-12-03', skills: ['Teamwork', 'Physical activity'], capacity: 24, applicants: 16, status: 'published', featured: true, accent: 'mint' },
   { id: 'opp-2', title: 'Code for Classrooms', organization: 'Udaan Learning Centre', organizationId: 'org-udaan', description: 'Teach middle-school learners the basics of web design through playful, project-based sessions.', category: 'Education', location: 'Noida', date: '2026-12-12', timeCommitment: '3 hours / week', deadline: '2026-12-08', skills: ['Web development', 'Teaching'], capacity: 10, applicants: 7, status: 'published', featured: true, accent: 'yellow' },
@@ -34,11 +39,13 @@ export const demoApplications: Application[] = [
   { id: 'app-2', opportunityId: 'opp-4', volunteerId: 'volunteer-arunesh', createdAt: '2026-11-14', status: 'pending' },
 ]
 
-export const initialStore: Store = { profiles: demoProfiles, opportunities: demoOpportunities, applications: demoApplications, saved: ['opp-1', 'opp-5'] }
+export const initialStore: Store = { profiles: demoProfiles, organizations: demoOrganizations, opportunities: demoOpportunities, applications: demoApplications, saved: ['opp-1', 'opp-5'] }
 
 export function loadStore(): Store {
   try {
     const stored = localStorage.getItem('yaar-demo-store')
-    return stored ? JSON.parse(stored) as Store : initialStore
+    if (!stored) return initialStore
+    const parsed = JSON.parse(stored) as Partial<Store>
+    return { ...initialStore, ...parsed, organizations: parsed.organizations ?? initialStore.organizations }
   } catch { return initialStore }
 }

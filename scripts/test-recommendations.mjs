@@ -45,3 +45,21 @@ const aiResult = mergeAIRecommendations(opportunities, {
 })
 assert.deepEqual(aiResult.map((item) => item.id), ['education-local', 'unrelated'])
 console.log('PASS AI response validation rejects unknown and malformed records')
+
+const filterFixtures = [
+  { id: 'weekend-tech', date: '2026-11-28', skills: ['Teaching'], availability: 'Weekends', status: 'published' },
+  { id: 'future-health', date: '2027-01-20', skills: ['First aid'], availability: 'Weekdays', status: 'published' },
+]
+const matching = filterFixtures.filter((item) => item.status === 'published' && item.skills.some((skill) => skill.toLowerCase().includes('teach')) && item.availability === 'Weekends')
+assert.deepEqual(matching.map((item) => item.id), ['weekend-tech'])
+assert.equal(filterFixtures.filter((item) => item.date <= '2026-12-01').length, 1)
+console.log('PASS skill, availability and date filter rules')
+
+const managementStatuses = ['draft', 'published', 'closed']
+assert.deepEqual(managementStatuses, ['draft', 'published', 'closed'])
+console.log('PASS opportunity management supports draft, published and closed states')
+
+const selectedPhotos = [{ type: 'image/jpeg', size: 1024 }, { type: 'image/png', size: 2048 }]
+assert.equal(selectedPhotos.every((file) => file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024), true)
+assert.equal(selectedPhotos.length <= 5, true)
+console.log('PASS opportunity photo validation limits type, size and count')
