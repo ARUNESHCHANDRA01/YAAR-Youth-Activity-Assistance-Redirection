@@ -15,6 +15,10 @@ function matchesInterest(query: string, opportunity: Opportunity) {
   return terms.some((term) => searchable.includes(term))
 }
 
+export function hasInterestMatch(interest: string, opportunities: Opportunity[]) {
+  return opportunities.some((item) => isEligibleOpportunity(item) && matchesInterest(interest, item))
+}
+
 export function isOpportunityNearby(profileLocation: string, opportunityLocation: string) {
   const profileParts = normalizeMatchText(profileLocation).split(' ').filter((part) => part.length >= 3)
   const opportunityParts = normalizeMatchText(opportunityLocation).split(' ').filter((part) => part.length >= 3)

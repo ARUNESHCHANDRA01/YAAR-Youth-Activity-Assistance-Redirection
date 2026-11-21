@@ -79,3 +79,8 @@ const interestRequest = 'teaching'
 const interestMatches = opportunities.filter((item) => item.status === 'published' && `${item.title} ${item.category} ${item.skills.join(' ')}`.toLowerCase().includes(interestRequest))
 assert.deepEqual(interestMatches.map((item) => item.id), ['education-local'])
 console.log('PASS assistant interest matching')
+
+const unknownInterest = 'astronomy'
+const unknownInterestMatches = opportunities.filter((item) => item.status === 'published' && `${item.title} ${item.category} ${item.description ?? ''} ${item.skills.join(' ')}`.toLowerCase().includes(unknownInterest))
+assert.deepEqual(unknownInterestMatches, [])
+console.log('PASS assistant no-match interest fallback')

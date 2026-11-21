@@ -9,7 +9,7 @@ import {
 import { categories, initialStore, loadStore } from './data'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { createLiveApplication, createLiveOpportunity, deleteLiveOpportunity, loadLiveStore, profileForSession, reviewLiveOpportunity, saveLiveOpportunity, updateLiveApplication, updateLiveOpportunity, updateLiveOrganization, updateLiveProfile, uploadLiveOpportunityImages } from './lib/supabaseData'
-import { isOpportunityNearby, recommend, recommendWithAI, type Recommendation, type RecommendationSource } from './lib/recommendations'
+import { hasInterestMatch, isOpportunityNearby, recommend, recommendWithAI, type Recommendation, type RecommendationSource } from './lib/recommendations'
 import type { ApplicationStatus, Opportunity, Profile, Role, Store } from './types'
 
 type AppContextValue = {
@@ -267,6 +267,7 @@ function Dashboard() {
 
 function PageIntro({ eyebrow, title, text, action }: { eyebrow: string; title: string; text: string; action?: ReactNode }) { const location = useLocation(); const { user, store } = useApp(); const showAssistant = location.pathname === '/dashboard' && user?.role === 'volunteer'; return <><div className="page-intro"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{text}</p></div>{action}</div>{showAssistant && <OpportunityAssistant profile={user} opportunities={store.opportunities} />}</> }
 type AssistantMessage = { id: number; role: 'assistant' | 'volunteer'; text: string; recommendations?: Recommendation[] }
+const NO_INTEREST_MESSAGE = 'Sorry, I couldn’t find anything relevant to your interests right now. Please try again later, and I’ll search for a suitable opportunity when one becomes available.'
 type SpeechRecognitionAlternativeLike = { transcript: string }
 type SpeechRecognitionResultLike = { isFinal: boolean; [index: number]: SpeechRecognitionAlternativeLike }
 type SpeechRecognitionEventLike = { resultIndex: number; results: ArrayLike<SpeechRecognitionResultLike> }
@@ -315,6 +316,7 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
   const resetAssistant = () => { phaseRef.current = 'wake'; setPhase('wake'); interestRef.current = ''; setInterest(''); setInput(''); setMessages([]); setOpen(true) }
   const startConversation = (value: string) => { phaseRef.current = 'interest'; setOpen(true); setPhase('interest'); setInput(''); addMessage({ role: 'volunteer', text: value }); addMessage({ role: 'assistant', text: 'What are your interests?' }) }
   const handleInputChange = (value: string) => { setInput(value); if (!open && phase === 'wake' && isAssistantWakePhrase(value)) startConversation(value.trim()) }
+  const finishNoInterest = () => { addMessage({ role: 'assistant', text: NO_INTEREST_MESSAGE }); speak(NO_INTEREST_MESSAGE); phaseRef.current = 'wake'; setPhase('wake'); setLoading(false) }
 
   const handleVoiceTranscript = async (transcript: string) => {
     const value = transcript.trim()
@@ -326,6 +328,7 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
     }
     if (phaseRef.current === 'interest') {
       interestRef.current = value; setInterest(value); addMessage({ role: 'volunteer', text: value })
+      if (!hasInterestMatch(value, opportunities)) { finishNoInterest(); return }
       if (!profile.location.trim()) { phaseRef.current = 'location'; setPhase('location'); addMessage({ role: 'assistant', text: 'What location should I use to find nearby opportunities?' }); speak('What location should I use to find nearby opportunities?'); return }
       await findRecommendations(value, profile.location)
       return
@@ -358,6 +361,7 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
   }, [])
 
   const findRecommendations = async (requestedInterest: string, requestedLocation: string) => {
+    if (!hasInterestMatch(requestedInterest, opportunities)) { finishNoInterest(); return }
     setLoading(true)
     addMessage({ role: 'assistant', text: `I’m looking for ${requestedInterest.toLowerCase()} opportunities near ${requestedLocation}.` })
     const result = await recommendWithAI({ ...profile, location: requestedLocation }, opportunities, requestedInterest)
@@ -384,11 +388,12 @@ function OpportunityAssistant({ profile, opportunities }: { profile: Profile; op
     }
     if (phase === 'interest') {
       interestRef.current = value; setInterest(value); addMessage({ role: 'volunteer', text: value })
+      if (!hasInterestMatch(value, opportunities)) { finishNoInterest(); return }
       if (!profile.location.trim()) { phaseRef.current = 'location'; setPhase('location'); addMessage({ role: 'assistant', text: 'What location should I use to find nearby opportunities?' }); return }
       await findRecommendations(value, profile.location)
       return
     }
-    addMessage({ role: 'volunteer', text: value }); await findRecommendations(interest, value)
+    addMessage({ role: 'volunteer', text: value }); await findRecommendations(interestRef.current, value)
   }
 
   return <section className={`assistant-card ${open ? 'open' : ''}`} aria-label="Y.A.A.R. Personal Opportunity Assistant"><div className="assistant-card-header"><div className="assistant-title"><span className="assistant-icon"><Sparkles size={17} /></span><div><span className="eyebrow">Y.A.A.R. PERSONAL OPPORTUNITY ASSISTANT</span><h2>Find something meaningful.</h2></div></div>{open && <button type="button" className="assistant-close" aria-label="Close assistant" onClick={closeAssistant}><X size={17} /></button>}</div>{!open ? <><p className="assistant-intro">Feeling bored? Tell me and I’ll help you find a nearby way to make an impact.</p><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => handleInputChange(event.target.value)} placeholder="Try: yaar bore ho raha hoon" aria-label="Ask the Y.A.A.R. assistant" /><button type="submit" aria-label="Start assistant"><ArrowRight size={17} /></button></form>{voiceMessage && <p className="assistant-voice-status">{voiceMessage}</p>}</> : <><div className="assistant-messages">{messages.map((message) => <div className={`assistant-message ${message.role}`} key={message.id}><span>{message.role === 'assistant' ? <Sparkles size={14} /> : profile.name.slice(0, 1)}</span><div><p>{message.text}</p>{message.recommendations?.length ? <div className="assistant-results">{message.recommendations.map((item) => <article className="assistant-result" key={item.id}><div><span className="eyebrow">{item.category} • {item.location}</span><h3>{item.title}</h3><p>{item.organization} • {Math.max(item.capacity - item.applicants, 0)} spots left • {formatDate(item.date)}</p><small>{item.reason}</small></div><div className="assistant-result-actions"><span className="match-score">{Math.max(item.score, 52)}%<small>match</small></span><Link to={`/opportunities/${item.id}`} className="text-link">View details <ArrowRight size={14} /></Link><button className="button button-primary button-small" onClick={() => { void apply(item.id) }}>Apply</button></div></article>)}</div> : null}</div></div>)}</div><form className="assistant-search" onSubmit={(event) => void submit(event)}><MessageCircle size={18} /><input value={input} onChange={(event) => handleInputChange(event.target.value)} placeholder={phase === 'interest' ? 'e.g. teaching, animals or technology' : phase === 'location' ? 'e.g. Greater Noida' : 'Start another search'} aria-label="Continue with the Y.A.A.R. assistant" /><button type="submit" aria-label="Send message" disabled={loading}>{loading ? '…' : <ArrowRight size={17} />}</button></form>{voiceMessage && <p className="assistant-voice-status">{voiceMessage}</p>}<button type="button" className="assistant-reset" onClick={resetAssistant}>Start a new search</button></>}</section>
