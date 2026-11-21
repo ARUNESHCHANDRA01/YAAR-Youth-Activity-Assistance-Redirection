@@ -43,6 +43,8 @@ npx supabase db push --remote
 
 This applies the opportunity approval, seeded catalog and management-enhancement migrations. The latest migration adds availability filtering, opportunity photos through the `opportunity-media` Storage bucket, and restricts volunteers to withdrawing their own applications; organization owners and administrators retain management permissions.
 
+For Edge Function deployment without Docker, run `npx supabase functions deploy recommend-opportunities --use-api --project-ref hddfdwhrromcxxyupymt`. The `--use-api` flag uploads the function through Supabase instead of building it with a local Docker container.
+
 The volunteer dashboard includes the Y.A.A.R. Personal Opportunity Assistant. It is activated from the dashboard search card by submitting either “yaar bore ho raha hoon” or “yaar bore ho rahi hoon”. It asks for an interest, uses the volunteer profile location when available, and sends the interest plus eligible opportunity data to the same server-side recommendation function. If the function or OpenAI is unavailable, the client uses the deterministic recommendation fallback.
 
 ## Provision a test administrator

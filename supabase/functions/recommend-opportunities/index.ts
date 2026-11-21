@@ -1,4 +1,4 @@
-// Deploy with: supabase functions deploy recommend-opportunities
+// Deploy with: npx supabase functions deploy recommend-opportunities --use-api --project-ref hddfdwhrromcxxyupymt
 // Configure with: supabase secrets set OPENAI_API_KEY=...
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 

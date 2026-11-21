@@ -66,7 +66,7 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 4. Add the project URL and anonymous key to `.env`.
 5. Apply all migrations, including `20261121000300_opportunity_management_enhancements.sql`, with the Supabase CLI or SQL editor. This creates the `opportunity-media` public bucket and its owner upload policies.
 6. Configure authentication redirect URLs for `http://localhost:5173/login` and the deployed `/login` route.
-7. Deploy `supabase/functions/recommend-opportunities/index.ts` with `supabase functions deploy recommend-opportunities`.
+7. Deploy `supabase/functions/recommend-opportunities/index.ts` through the Supabase API with `npx supabase functions deploy recommend-opportunities --use-api --project-ref hddfdwhrromcxxyupymt` so Docker is not required.
 8. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
 
 The volunteer dashboard calls the `recommend-opportunities` Edge Function when a live Supabase session exists. The Edge Function keeps `OPENAI_API_KEY` server-side, accepts the assistant’s current interest request, returns validated opportunity IDs, scores and explanations, and the client merges only eligible published opportunities. The frontend continues to work with rule-based recommendations when Supabase, the Edge Function or OpenAI is unavailable. When Supabase is configured, `src/lib/supabaseData.ts` loads sessions, profiles, opportunities, applications and saved opportunities from PostgreSQL. The demo store remains intentionally separate so a reviewer can explore the application without credentials.
