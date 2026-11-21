@@ -71,6 +71,8 @@ const wakePhrases = ['yaar bore ho raha hoon', 'yaar bore ho rahi hoon']
 assert.equal(wakePhrases.includes(normalizeWakePhrase('  YAAR,   bore ho raha hoon!!! ')), true)
 assert.equal(wakePhrases.includes(normalizeWakePhrase('Yaar bore ho rahi hoon')), true)
 assert.equal(wakePhrases.includes(normalizeWakePhrase('yaar busy hoon')), false)
+const fuzzyWake = normalizeWakePhrase('yar bor ho raha hun').split(' ')
+assert.equal(fuzzyWake.includes('yar') && fuzzyWake.includes('bor') && fuzzyWake.includes('raha') && fuzzyWake.includes('hun'), true)
 console.log('PASS assistant wake phrase normalization')
 
 const interestRequest = 'teaching'
