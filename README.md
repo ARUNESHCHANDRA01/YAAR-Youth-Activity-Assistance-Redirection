@@ -66,7 +66,7 @@ Only the publishable/anonymous Supabase key may be used in the Vite client. `OPE
 3. In Google Cloud Console, add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized redirect URI.
 4. Add the project URL and anonymous key to `.env`.
 5. Apply all migrations, including `20261121000300_opportunity_management_enhancements.sql` and `20261121000400_rewards_and_opportunity_budgets.sql`, with the Supabase CLI or SQL editor. These create the `opportunity-media` public bucket, opportunity reward fields, cash/perk reward records and redemption-request policies.
-6. Configure authentication redirect URLs for `http://localhost:5173/login` and the deployed `/login` route.
+6. Configure authentication redirect URLs for `http://localhost:5173/dashboard` and the deployed `/dashboard` route. Keep `/login` allowed as well for password-reset and confirmation flows.
 7. Deploy `supabase/functions/recommend-opportunities/index.ts` through the Supabase API with `npx supabase functions deploy recommend-opportunities --use-api --project-ref hddfdwhrromcxxyupymt` so Docker is not required.
 8. Set the Edge Function secret with `supabase secrets set OPENAI_API_KEY=...`.
 
