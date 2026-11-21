@@ -2,6 +2,11 @@ export type Role = 'volunteer' | 'organization' | 'administrator'
 export type OpportunityStatus = 'published' | 'draft' | 'closed'
 export type OpportunityReviewStatus = 'pending' | 'approved' | 'rejected'
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'completed'
+export type RewardType = 'none' | 'cash' | 'credits' | 'perks' | 'cash_and_perks'
+export type CashRewardStatus = 'available' | 'requested' | 'paid'
+export type PerkRewardStatus = 'available' | 'redeemed'
+export type RedemptionKind = 'cash' | 'perk'
+export type RedemptionStatus = 'requested' | 'approved' | 'completed'
 
 export type Profile = {
   id: string
@@ -41,6 +46,11 @@ export type Opportunity = {
   availability?: string
   contactEmail?: string
   imageUrls?: string[]
+  rewardType?: RewardType
+  totalBudget?: number
+  budgetCurrency?: string
+  creditReward?: number
+  perkDescription?: string
   capacity: number
   applicants: number
   status: OpportunityStatus
@@ -58,10 +68,47 @@ export type Application = {
   status: ApplicationStatus
 }
 
+export type CashReward = {
+  id: string
+  volunteerId: string
+  opportunityId: string
+  amount: number
+  currency: string
+  status: CashRewardStatus
+  note: string
+  createdAt: string
+  paidAt?: string
+}
+
+export type PerkReward = {
+  id: string
+  volunteerId: string
+  opportunityId: string
+  title: string
+  description: string
+  credits: number
+  status: PerkRewardStatus
+  createdAt: string
+  redeemedAt?: string
+}
+
+export type RewardRedemption = {
+  id: string
+  volunteerId: string
+  rewardId: string
+  kind: RedemptionKind
+  status: RedemptionStatus
+  note: string
+  createdAt: string
+}
+
 export type Store = {
   profiles: Profile[]
   organizations: Organization[]
   opportunities: Opportunity[]
   applications: Application[]
   saved: string[]
+  cashRewards: CashReward[]
+  perkRewards: PerkReward[]
+  redemptions: RewardRedemption[]
 }

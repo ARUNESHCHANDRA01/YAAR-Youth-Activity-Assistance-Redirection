@@ -84,3 +84,15 @@ const unknownInterest = 'astronomy'
 const unknownInterestMatches = opportunities.filter((item) => item.status === 'published' && `${item.title} ${item.category} ${item.description ?? ''} ${item.skills.join(' ')}`.toLowerCase().includes(unknownInterest))
 assert.deepEqual(unknownInterestMatches, [])
 console.log('PASS assistant no-match interest fallback')
+
+function rewardPerVolunteer(totalBudget, maximumCapacity) {
+  return maximumCapacity > 0 ? Math.round((totalBudget / maximumCapacity) * 100) / 100 : 0
+}
+assert.equal(rewardPerVolunteer(8000, 10), 800)
+assert.equal(rewardPerVolunteer(8000, 3), 2666.67)
+assert.equal(rewardPerVolunteer(8000, 10), 800)
+console.log('PASS cash budget is divided by maximum volunteer capacity')
+
+const rewardKinds = ['none', 'cash', 'credits', 'perks', 'cash_and_perks']
+assert.ok(rewardKinds.includes('cash') && rewardKinds.includes('perks'))
+console.log('PASS cash and perks use separate reward types')

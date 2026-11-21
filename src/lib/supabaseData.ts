@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { ApplicationStatus, Opportunity, OpportunityReviewStatus, Organization, Profile, Store } from '../types'
+import type { ApplicationStatus, CashReward, Opportunity, OpportunityReviewStatus, Organization, PerkReward, Profile, RewardRedemption, Store } from '../types'
 
 type OpportunityRow = {
   id: string
@@ -17,6 +17,11 @@ type OpportunityRow = {
   volunteer_capacity: number
   contact_email?: string | null
   image_urls?: string[] | null
+  reward_type?: Opportunity['rewardType'] | null
+  total_budget?: number | null
+  budget_currency?: string | null
+  credit_reward?: number | null
+  perk_description?: string | null
   status: Opportunity['status']
   review_status?: OpportunityReviewStatus
   created_by?: string | null
@@ -61,7 +66,7 @@ export async function profileForSession(session: Session): Promise<Profile> {
 
 function opportunityFromRow(row: OpportunityRow): Opportunity {
   const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
-  return { id: row.id, title: row.title, organization: row.partner_name ?? organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], availability: row.availability ?? 'Flexible', contactEmail: row.contact_email ?? undefined, imageUrls: row.image_urls ?? [], capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, featured: Boolean(row.featured), accent: accentForCategory(row.category) }
+  return { id: row.id, title: row.title, organization: row.partner_name ?? organization?.name ?? 'Volunteer proposal', organizationId: organization?.owner_id ?? row.organization_id ?? '', description: row.description, category: row.category, location: row.location, date: row.activity_date, timeCommitment: row.time_commitment, deadline: row.application_deadline, skills: row.required_skills ?? [], availability: row.availability ?? 'Flexible', contactEmail: row.contact_email ?? undefined, imageUrls: row.image_urls ?? [], rewardType: row.reward_type ?? 'none', totalBudget: Number(row.total_budget ?? 0), budgetCurrency: row.budget_currency ?? 'INR', creditReward: Number(row.credit_reward ?? 0), perkDescription: row.perk_description ?? '', capacity: row.volunteer_capacity, applicants: 0, status: row.status, reviewStatus: row.review_status ?? (row.status === 'published' ? 'approved' : 'pending'), createdBy: row.created_by ?? undefined, featured: Boolean(row.featured), accent: accentForCategory(row.category) }
 }
 
 function accentForCategory(category: string) {
@@ -110,7 +115,23 @@ export async function loadLiveStore(profile: Profile | null): Promise<Store> {
     if (savedError) throw savedError
     saved = (savedRows ?? []).map((row) => String((row as Record<string, unknown>).opportunity_id))
   }
-  return { profiles, organizations, opportunities, applications, saved }
+  let cashRewards: CashReward[] = []
+  let perkRewards: PerkReward[] = []
+  let redemptions: RewardRedemption[] = []
+  try {
+    const [{ data: cashRows, error: cashError }, { data: perkRows, error: perkError }, { data: redemptionRows, error: redemptionError }] = await Promise.all([
+      client.from('cash_rewards').select('id, volunteer_id, opportunity_id, amount, currency, status, note, created_at, paid_at'),
+      client.from('perk_rewards').select('id, volunteer_id, opportunity_id, title, description, credits, status, created_at, redeemed_at'),
+      client.from('reward_redemptions').select('id, volunteer_id, cash_reward_id, perk_reward_id, kind, status, note, created_at'),
+    ])
+    if (cashError || perkError || redemptionError) throw cashError ?? perkError ?? redemptionError
+    cashRewards = (cashRows ?? []).map((row) => ({ id: String(row.id), volunteerId: String(row.volunteer_id), opportunityId: String(row.opportunity_id), amount: Number(row.amount), currency: String(row.currency ?? 'INR'), status: row.status as CashReward['status'], note: String(row.note ?? ''), createdAt: String(row.created_at).slice(0, 10), paidAt: row.paid_at ? String(row.paid_at).slice(0, 10) : undefined }))
+    perkRewards = (perkRows ?? []).map((row) => ({ id: String(row.id), volunteerId: String(row.volunteer_id), opportunityId: String(row.opportunity_id), title: String(row.title), description: String(row.description ?? ''), credits: Number(row.credits ?? 0), status: row.status as PerkReward['status'], createdAt: String(row.created_at).slice(0, 10), redeemedAt: row.redeemed_at ? String(row.redeemed_at).slice(0, 10) : undefined }))
+    redemptions = (redemptionRows ?? []).map((row) => ({ id: String(row.id), volunteerId: String(row.volunteer_id), rewardId: String(row.cash_reward_id ?? row.perk_reward_id), kind: row.kind as RewardRedemption['kind'], status: row.status as RewardRedemption['status'], note: String(row.note ?? ''), createdAt: String(row.created_at).slice(0, 10) }))
+  } catch {
+    // The rewards migration is optional for older deployments; the local reward view remains available.
+  }
+  return { profiles, organizations, opportunities, applications, saved, cashRewards, perkRewards, redemptions }
 }
 
 export async function updateLiveProfile(userId: string, data: Partial<Profile>) {
@@ -123,6 +144,25 @@ export async function updateLiveProfile(userId: string, data: Partial<Profile>) 
 export async function createLiveApplication(opportunityId: string, volunteerId: string) {
   const client = requireClient()
   const { error } = await client.from('applications').insert({ opportunity_id: opportunityId, volunteer_id: volunteerId })
+  if (error) throw error
+}
+
+export async function createLiveCashReward(reward: Omit<CashReward, 'id'>) {
+  const client = requireClient()
+  const { error } = await client.from('cash_rewards').upsert({ volunteer_id: reward.volunteerId, opportunity_id: reward.opportunityId, amount: reward.amount, currency: reward.currency, status: reward.status, note: reward.note, created_at: reward.createdAt, paid_at: reward.paidAt ?? null }, { onConflict: 'volunteer_id,opportunity_id' })
+  if (error) throw error
+}
+
+export async function createLivePerkReward(reward: Omit<PerkReward, 'id'>) {
+  const client = requireClient()
+  const { error } = await client.from('perk_rewards').upsert({ volunteer_id: reward.volunteerId, opportunity_id: reward.opportunityId, title: reward.title, description: reward.description, credits: reward.credits, status: reward.status, created_at: reward.createdAt, redeemed_at: reward.redeemedAt ?? null }, { onConflict: 'volunteer_id,opportunity_id' })
+  if (error) throw error
+}
+
+export async function createLiveRewardRedemption(redemption: Omit<RewardRedemption, 'id'>) {
+  const client = requireClient()
+  const payload = { volunteer_id: redemption.volunteerId, cash_reward_id: redemption.kind === 'cash' ? redemption.rewardId : null, perk_reward_id: redemption.kind === 'perk' ? redemption.rewardId : null, kind: redemption.kind, status: redemption.status, note: redemption.note, created_at: redemption.createdAt }
+  const { error } = await client.from('reward_redemptions').insert(payload)
   if (error) throw error
 }
 
@@ -151,14 +191,14 @@ export async function createLiveOpportunity(opportunity: Opportunity, ownerId: s
     if (organizationError) throw organizationError
     organizationId = organization.id
   }
-  const { data: row, error } = await client.from('opportunities').insert({ organization_id: organizationId, created_by: ownerId, title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, availability: opportunity.availability ?? 'Flexible', contact_email: opportunity.contactEmail ?? null, image_urls: [], volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : 'approved' }).select('id').single()
+  const { data: row, error } = await client.from('opportunities').insert({ organization_id: organizationId, created_by: ownerId, title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, availability: opportunity.availability ?? 'Flexible', contact_email: opportunity.contactEmail ?? null, image_urls: [], reward_type: opportunity.rewardType ?? 'none', total_budget: opportunity.totalBudget ?? 0, budget_currency: opportunity.budgetCurrency ?? 'INR', credit_reward: opportunity.creditReward ?? 0, perk_description: opportunity.perkDescription ?? '', volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : 'approved' }).select('id').single()
   if (error) throw error
   return String(row.id)
 }
 
 export async function updateLiveOpportunity(opportunity: Opportunity, ownerId: string, ownerRole: Profile['role']) {
   const client = requireClient()
-  let query = client.from('opportunities').update({ title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, availability: opportunity.availability ?? 'Flexible', contact_email: opportunity.contactEmail ?? null, image_urls: opportunity.imageUrls ?? [], volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : (opportunity.reviewStatus ?? 'approved') }).eq('id', opportunity.id)
+  let query = client.from('opportunities').update({ title: opportunity.title, description: opportunity.description, category: opportunity.category, location: opportunity.location, activity_date: opportunity.date, time_commitment: opportunity.timeCommitment, application_deadline: opportunity.deadline, required_skills: opportunity.skills, availability: opportunity.availability ?? 'Flexible', contact_email: opportunity.contactEmail ?? null, image_urls: opportunity.imageUrls ?? [], reward_type: opportunity.rewardType ?? 'none', total_budget: opportunity.totalBudget ?? 0, budget_currency: opportunity.budgetCurrency ?? 'INR', credit_reward: opportunity.creditReward ?? 0, perk_description: opportunity.perkDescription ?? '', volunteer_capacity: opportunity.capacity, status: ownerRole === 'volunteer' ? 'draft' : opportunity.status, review_status: ownerRole === 'volunteer' ? 'pending' : (opportunity.reviewStatus ?? 'approved') }).eq('id', opportunity.id)
   if (ownerRole !== 'administrator') query = query.eq('created_by', ownerId)
   const { error } = await query
   if (error) throw error
